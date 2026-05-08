@@ -9060,6 +9060,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "opencode_client"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-stream",
+ "futures",
+ "log",
+ "reqwest",
+ "reqwest-eventsource",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.17",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "openh264"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -14408,6 +14425,7 @@ dependencies = [
  "objc2-foundation 0.3.2",
  "onboarding",
  "once_cell",
+ "opencode_client",
  "ordered-float 3.9.2",
  "os_info",
  "palette",

@@ -9,7 +9,8 @@ use warpui::{Entity, ModelContext, SingletonEntity};
 
 use crate::{
     ai::agent::{
-        api::{self, generate_multi_agent_output, ConvertToAPITypeError},
+        api::{self, ConvertToAPITypeError},
+        backend_switch::generate_agent_output,
         conversation::AIConversationId,
         AIIdentifiers, CancellationReason,
     },
@@ -94,7 +95,7 @@ impl ResponseStream {
         let _ =
             ctx.spawn(
                 async move {
-                    generate_multi_agent_output(server_api, params_clone, cancellation_rx).await
+                    generate_agent_output(server_api, params_clone, cancellation_rx).await
                 },
                 move |me, stream, ctx| {
                     me.handle_response_stream_result(request_id, stream, ctx);
@@ -157,7 +158,7 @@ impl ResponseStream {
         let params = self.params.clone();
         let server_api = ServerApiProvider::as_ref(ctx).get();
         let _ = ctx.spawn(
-            async move { generate_multi_agent_output(server_api, params, cancellation_rx).await },
+            async move { generate_agent_output(server_api, params, cancellation_rx).await },
             move |me, stream, ctx| {
                 me.handle_response_stream_result(request_id, stream, ctx);
             },
