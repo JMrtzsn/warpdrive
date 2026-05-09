@@ -236,3 +236,15 @@ fn real_response_shape_step_text_step() {
     // Total: Init + CreateTask + AddMessages(text) + Finished = 4
     assert_eq!(events.len(), 4);
 }
+
+#[test]
+fn system_prompt_contains_environment_info() {
+    let prompt = build_system_prompt();
+    assert!(prompt.contains("Warpdrive"), "should mention Warpdrive");
+    assert!(prompt.contains("/plan"), "should document /plan command");
+    assert!(prompt.contains("/compact"), "should document /compact command");
+    assert!(prompt.contains("/orchestrate"), "should document /orchestrate command");
+    assert!(prompt.contains("Working directory:"), "should include CWD");
+    assert!(prompt.contains("Shell:"), "should include shell");
+    assert!(prompt.contains("OS:"), "should include OS");
+}

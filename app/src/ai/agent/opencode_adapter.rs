@@ -115,18 +115,6 @@ pub async fn generate_opencode_output(
     let model_id = resolve_model_id(&params.model.to_string());
     log::info!("generate_opencode_output: resolved model={model_id:?}");
 
-    let prompt_req = PromptRequest {
-        parts: vec![MessagePart::Text { text: user_text }],
-        model: model_id.map(|id| ModelSelection {
-            provider_id: infer_provider(&id),
-            model_id: id,
-        }),
-        agent: None,
-        no_reply: None,
-        system: None,
-        tools: None,
-    };
-
     let client = guard.client.clone();
 
     // Determine if this is the first message (need CreateTask) or a follow-up.
@@ -138,6 +126,22 @@ pub async fn generate_opencode_output(
     let request_id = uuid::Uuid::new_v4().to_string();
 
     drop(guard);
+
+    let prompt_req = PromptRequest {
+        parts: vec![MessagePart::Text { text: user_text }],
+        model: model_id.map(|id| ModelSelection {
+            provider_id: infer_provider(&id),
+            model_id: id,
+        }),
+        agent: None,
+        no_reply: None,
+        system: if is_first_message {
+            Some(build_system_prompt())
+        } else {
+            None
+        },
+        tools: None,
+    };
 
     // Use synchronous prompt — blocks until LLM completes.
     log::info!("generate_opencode_output: sending synchronous prompt");
@@ -491,6 +495,47 @@ fn resolve_model_id(model_id: &str) -> Option<String> {
         "auto-efficient" | "auto_efficient" | "auto-best" | "auto_best" | "auto" => None,
         other => Some(other.to_string()),
     }
+}
+
+/// Build a system prompt that gives OpenCode context about the Warp terminal environment.
+fn build_system_prompt() -> String {
+    let cwd = std::env::current_dir()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "unknown".to_string());
+    let shell = std::env::var("SHELL").unwrap_or_else(|_| "unknown".to_string());
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+
+    format!(
+        r#"You are an AI coding assistant running inside the Warpdrive terminal (a fork of Warp).
+You have full access to the user's development environment through OpenCode tools.
+
+## Environment
+- Working directory: {cwd}
+- Shell: {shell}
+- OS: {os} ({arch})
+
+## Capabilities
+You can:
+- Read, write, and edit files
+- Run shell commands
+- Search codebases (grep, glob)
+- Fetch web content
+
+## Slash Commands
+The user may prefix their message with these commands:
+- /plan <task> — Research the codebase and create a detailed plan before implementing
+- /orchestrate <task> — Break the task into subtasks for parallel execution
+- /compact — Summarize the conversation so far to free up context window
+
+When you see these prefixes, adjust your behavior accordingly.
+
+## Guidelines
+- Be concise and direct
+- Show file paths when referencing code
+- Run commands to verify your work
+- Ask for clarification when requirements are ambiguous"#
+    )
 }
 
 #[cfg(test)]
