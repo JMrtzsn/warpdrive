@@ -17,7 +17,7 @@ static OPENCODE_ADAPTER: Lazy<Option<Arc<Mutex<OpenCodeAdapter>>>> = Lazy::new(|
     let working_dir = std::env::current_dir().ok()?;
     // Use port 14096 to avoid conflicts with user's opencode instance.
     let sidecar = SidecarManager::new(binary, working_dir).with_port(14096);
-    Some(Arc::new(Mutex::new(OpenCodeAdapter::new(sidecar))))
+    Some(Arc::new(Mutex::new(OpenCodeAdapter::with_sidecar(sidecar))))
 });
 
 /// Check whether the OpenCode backend should be used.

@@ -5,28 +5,36 @@ mod tests {
 
     #[test]
     fn test_parse_session_updated_event() {
-        let data = r#"{"type": "session.updated", "properties": {"id": "sess_123", "status": "running"}}"#;
+        // session.updated is informational — should produce no events.
+        let data = r#"{"type": "session.updated", "properties": {"id": "sess_123"}}"#;
+        let events = parse_sse_message("message", data).unwrap();
+        assert!(events.is_empty());
+    }
+
+    #[test]
+    fn test_parse_session_idle() {
+        let data = r#"{"type": "session.idle", "properties": {"sessionID": "sess_123"}}"#;
         let events = parse_sse_message("message", data).unwrap();
         assert_eq!(events.len(), 1);
         match &events[0] {
             OpenCodeEvent::SessionStatusChanged { session_id, status } => {
                 assert_eq!(session_id, "sess_123");
-                assert_eq!(status, "running");
+                assert_eq!(status, "idle");
             }
             _ => panic!("expected SessionStatusChanged"),
         }
     }
 
     #[test]
-    fn test_parse_message_with_text_part() {
+    fn test_parse_message_part_delta_text() {
         let data = r#"{
-            "type": "message.updated",
+            "type": "message.part.delta",
             "properties": {
                 "sessionID": "sess_1",
-                "id": "msg_1",
-                "parts": [
-                    {"type": "text", "content": "Hello world"}
-                ]
+                "messageID": "msg_1",
+                "partID": "prt_1",
+                "field": "text",
+                "delta": "Hello world"
             }
         }"#;
         let events = parse_sse_message("message", data).unwrap();
@@ -48,19 +56,17 @@ mod tests {
     #[test]
     fn test_parse_tool_call_started() {
         let data = r#"{
-            "type": "message.updated",
+            "type": "message.part.updated",
             "properties": {
                 "sessionID": "sess_1",
-                "id": "msg_1",
-                "parts": [
-                    {
-                        "type": "tool-call",
-                        "tool": "bash",
-                        "toolCallId": "tc_1",
-                        "state": "running",
-                        "args": {"command": "ls"}
-                    }
-                ]
+                "part": {
+                    "type": "tool-call",
+                    "tool": "bash",
+                    "toolCallId": "tc_1",
+                    "state": "running",
+                    "args": {"command": "ls"},
+                    "messageID": "msg_1"
+                }
             }
         }"#;
         let events = parse_sse_message("message", data).unwrap();
@@ -83,19 +89,17 @@ mod tests {
     #[test]
     fn test_parse_tool_call_completed() {
         let data = r#"{
-            "type": "message.updated",
+            "type": "message.part.updated",
             "properties": {
                 "sessionID": "sess_1",
-                "id": "msg_1",
-                "parts": [
-                    {
-                        "type": "tool-call",
-                        "tool": "bash",
-                        "toolCallId": "tc_1",
-                        "state": "completed",
-                        "content": "file1.rs\nfile2.rs"
-                    }
-                ]
+                "part": {
+                    "type": "tool-call",
+                    "tool": "bash",
+                    "toolCallId": "tc_1",
+                    "state": "completed",
+                    "content": "file1.rs\nfile2.rs",
+                    "messageID": "msg_1"
+                }
             }
         }"#;
         let events = parse_sse_message("message", data).unwrap();
@@ -145,14 +149,11 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_server_connected() {
+    fn test_parse_server_connected_ignored() {
+        // server.connected is ignored (we use SSE Open event instead).
         let data = r#"{"type": "server.connected", "properties": {}}"#;
         let events = parse_sse_message("message", data).unwrap();
-        assert_eq!(events.len(), 1);
-        match &events[0] {
-            OpenCodeEvent::Connected => {}
-            _ => panic!("expected Connected"),
-        }
+        assert!(events.is_empty());
     }
 
     #[test]
@@ -169,27 +170,30 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_multiple_parts_in_message() {
+    fn test_parse_message_updated_with_finish() {
         let data = r#"{
             "type": "message.updated",
             "properties": {
                 "sessionID": "sess_1",
-                "id": "msg_1",
-                "parts": [
-                    {"type": "text", "content": "Here's the result:"},
-                    {
-                        "type": "tool-call",
-                        "tool": "read",
-                        "toolCallId": "tc_2",
-                        "state": "completed",
-                        "content": "file contents here"
-                    }
-                ]
+                "info": {
+                    "id": "msg_1",
+                    "role": "assistant",
+                    "finish": "stop"
+                }
             }
         }"#;
         let events = parse_sse_message("message", data).unwrap();
-        assert_eq!(events.len(), 2);
-        assert!(matches!(&events[0], OpenCodeEvent::TextDelta { .. }));
-        assert!(matches!(&events[1], OpenCodeEvent::ToolCallCompleted { .. }));
+        assert_eq!(events.len(), 1);
+        match &events[0] {
+            OpenCodeEvent::MessageComplete {
+                session_id,
+                message_id,
+                ..
+            } => {
+                assert_eq!(session_id, "sess_1");
+                assert_eq!(message_id, "msg_1");
+            }
+            _ => panic!("expected MessageComplete"),
+        }
     }
 }

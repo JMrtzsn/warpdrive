@@ -64,6 +64,9 @@ pub struct Message {
 pub struct Part {
     #[serde(rename = "type")]
     pub part_type: String,
+    /// Text content for "text" parts.
+    #[serde(default)]
+    pub text: Option<String>,
     /// Tool name if this is a tool-call or tool-result part.
     #[serde(default)]
     pub tool: Option<String>,
@@ -73,12 +76,21 @@ pub struct Part {
     /// The state of this part (e.g. "running", "completed", "error").
     #[serde(default)]
     pub state: Option<String>,
-    /// Arbitrary content — text for text parts, structured for tool calls.
+    /// Arbitrary content — structured data for tool calls/results.
     #[serde(default)]
     pub content: serde_json::Value,
     /// Tool input arguments.
     #[serde(default)]
     pub args: Option<serde_json::Value>,
+    /// Part ID assigned by OpenCode.
+    #[serde(default)]
+    pub id: Option<String>,
+    /// Session ID.
+    #[serde(rename = "sessionID", default)]
+    pub session_id: Option<String>,
+    /// Message ID this part belongs to.
+    #[serde(rename = "messageID", default)]
+    pub message_id: Option<String>,
 }
 
 /// Response from GET /session/:id/message and POST /session/:id/message.

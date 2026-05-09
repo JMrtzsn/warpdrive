@@ -116,154 +116,211 @@ pub fn subscribe_events(event_url: &str) -> OpenCodeEventStream {
 }
 
 /// Parse a raw SSE message into OpenCode events.
+///
+/// Real SSE format from OpenCode server (v1.14+):
+/// ```json
+/// {"id":"evt_...","type":"message.part.delta","properties":{"sessionID":"...","messageID":"...","partID":"...","field":"text","delta":"Hi"}}
+/// {"id":"evt_...","type":"message.part.updated","properties":{"sessionID":"...","part":{"type":"text","text":"Hi.","messageID":"...","id":"..."}}}
+/// {"id":"evt_...","type":"message.updated","properties":{"sessionID":"...","info":{"id":"...","role":"assistant","finish":"stop",...}}}
+/// {"id":"evt_...","type":"session.idle","properties":{"sessionID":"..."}}
+/// ```
 pub(crate) fn parse_sse_message(event_type: &str, data: &str) -> Result<Vec<OpenCodeEvent>> {
     let value: serde_json::Value =
         serde_json::from_str(data).context("failed to parse SSE data as JSON")?;
 
+    let etype = value
+        .get("type")
+        .and_then(|v| v.as_str())
+        .unwrap_or(event_type);
+
+    let props = value.get("properties").unwrap_or(&value);
+
+    let session_id = || {
+        props
+            .get("sessionID")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+
     let mut events = Vec::new();
 
-    match event_type {
-        // OpenCode emits events with type field in the JSON payload
-        _ => {
-            let etype = value
-                .get("type")
-                .and_then(|v| v.as_str())
-                .unwrap_or(event_type);
+    match etype {
+        "server.connected" => {
+            // Ignored — we already emit Connected from the SSE Open event.
+            // Processing this duplicate would cause double StreamInit.
+        }
 
-            let properties = value.get("properties").cloned().unwrap_or(value.clone());
-
-            match etype {
-                "session.updated" | "session.created" => {
-                    if let Some(id) = properties.get("id").and_then(|v| v.as_str()) {
-                        events.push(OpenCodeEvent::SessionStatusChanged {
-                            session_id: id.to_string(),
-                            status: properties
-                                .get("status")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("idle")
-                                .to_string(),
-                        });
-                    }
+        // ── Streaming text deltas ───────────────────────────────────
+        // {"type":"message.part.delta","properties":{"sessionID","messageID","partID","field":"text","delta":"Hi"}}
+        "message.part.delta" => {
+            let field = props.get("field").and_then(|v| v.as_str()).unwrap_or("");
+            if field == "text" {
+                let delta = props
+                    .get("delta")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let message_id = props
+                    .get("messageID")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                if !delta.is_empty() {
+                    events.push(OpenCodeEvent::TextDelta {
+                        session_id: session_id(),
+                        message_id,
+                        text: delta,
+                    });
                 }
-                "message.updated" | "message.created" => {
-                    let session_id = properties
-                        .get("sessionID")
-                        .or_else(|| properties.get("session_id"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let message_id = properties
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
+            }
+        }
 
-                    // Check for parts to detect tool calls and text
-                    if let Some(parts) = properties.get("parts").and_then(|v| v.as_array()) {
-                        for part in parts {
-                            let part_type = part
-                                .get("type")
-                                .and_then(|v| v.as_str())
-                                .unwrap_or("");
+        // ── Part updates (tool calls, text completion, step-finish) ─
+        // {"type":"message.part.updated","properties":{"sessionID","part":{"type":"tool-call"|"text"|"step-finish",...}}}
+        "message.part.updated" => {
+            if let Some(part) = props.get("part") {
+                let part_type = part.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                let msg_id = part
+                    .get("messageID")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
 
-                            match part_type {
-                                "text" => {
-                                    if let Some(text) =
-                                        part.get("content").and_then(|v| v.as_str())
-                                    {
-                                        events.push(OpenCodeEvent::TextDelta {
-                                            session_id: session_id.clone(),
-                                            message_id: message_id.clone(),
-                                            text: text.to_string(),
-                                        });
-                                    }
-                                }
-                                "tool-call" => {
-                                    let tool_name = part
-                                        .get("tool")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    let tool_call_id = part
-                                        .get("toolCallId")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    let state = part
-                                        .get("state")
-                                        .and_then(|v| v.as_str())
-                                        .unwrap_or("");
-                                    let args = part
-                                        .get("args")
-                                        .cloned()
-                                        .unwrap_or(serde_json::Value::Null);
+                match part_type {
+                    "tool-call" => {
+                        let tool_name = part
+                            .get("tool")
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let tool_call_id = part
+                            .get("toolCallId")
+                            .or_else(|| part.get("id"))
+                            .and_then(|v| v.as_str())
+                            .unwrap_or("")
+                            .to_string();
+                        let state = part.get("state").and_then(|v| v.as_str()).unwrap_or("");
+                        let args = part
+                            .get("args")
+                            .cloned()
+                            .unwrap_or(serde_json::Value::Null);
 
-                                    match state {
-                                        "completed" | "error" => {
-                                            let result = part
-                                                .get("content")
-                                                .cloned()
-                                                .unwrap_or(serde_json::Value::Null);
-                                            events.push(OpenCodeEvent::ToolCallCompleted {
-                                                session_id: session_id.clone(),
-                                                message_id: message_id.clone(),
-                                                tool_call_id,
-                                                tool_name,
-                                                result,
-                                            });
-                                        }
-                                        _ => {
-                                            events.push(OpenCodeEvent::ToolCallStarted {
-                                                session_id: session_id.clone(),
-                                                message_id: message_id.clone(),
-                                                tool_call_id,
-                                                tool_name,
-                                                args,
-                                            });
-                                        }
-                                    }
-                                }
-                                _ => {}
+                        match state {
+                            "completed" | "error" => {
+                                let result = part
+                                    .get("content")
+                                    .cloned()
+                                    .unwrap_or(serde_json::Value::Null);
+                                events.push(OpenCodeEvent::ToolCallCompleted {
+                                    session_id: session_id(),
+                                    message_id: msg_id,
+                                    tool_call_id,
+                                    tool_name,
+                                    result,
+                                });
+                            }
+                            _ => {
+                                events.push(OpenCodeEvent::ToolCallStarted {
+                                    session_id: session_id(),
+                                    message_id: msg_id,
+                                    tool_call_id,
+                                    tool_name,
+                                    args,
+                                });
                             }
                         }
                     }
-                }
-                "permission.requested" => {
-                    let session_id = properties
-                        .get("sessionID")
-                        .or_else(|| properties.get("session_id"))
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let permission_id = properties
-                        .get("id")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let tool_name = properties
-                        .get("tool")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("")
-                        .to_string();
-                    let args = properties
-                        .get("args")
-                        .cloned()
-                        .unwrap_or(serde_json::Value::Null);
-
-                    events.push(OpenCodeEvent::PermissionRequired {
-                        session_id,
-                        permission_id,
-                        tool_name,
-                        args,
-                    });
-                }
-                "server.connected" => {
-                    events.push(OpenCodeEvent::Connected);
-                }
-                _ => {
-                    log::debug!("Unhandled OpenCode event type: {}", etype);
+                    // step-finish with reason "stop" means the message is done.
+                    "step-finish" => {
+                        // We'll let session.idle handle the final "finished" signal.
+                    }
+                    // text part update — full text (not delta). Ignore since we
+                    // already stream via message.part.delta.
+                    "text" => {}
+                    _ => {
+                        log::debug!("Unhandled message.part.updated type: {}", part_type);
+                    }
                 }
             }
+        }
+
+        // ── Message-level updates ───────────────────────────────────
+        // {"type":"message.updated","properties":{"sessionID","info":{"id","role","finish":"stop",...}}}
+        "message.updated" | "message.created" => {
+            if let Some(info) = props.get("info") {
+                let role = info.get("role").and_then(|v| v.as_str()).unwrap_or("");
+                let finish = info.get("finish").and_then(|v| v.as_str());
+                let msg_id = info
+                    .get("id")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+
+                // Only emit MessageComplete when the assistant message has a
+                // finish reason (i.e. the LLM is done).
+                if role == "assistant" && finish.is_some() {
+                    events.push(OpenCodeEvent::MessageComplete {
+                        session_id: session_id(),
+                        message_id: msg_id,
+                        parts: vec![],
+                    });
+                }
+            }
+        }
+
+        // ── Session status ──────────────────────────────────────────
+        "session.status" => {
+            if let Some(status) = props.get("status") {
+                let status_type = status
+                    .get("type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("unknown")
+                    .to_string();
+                events.push(OpenCodeEvent::SessionStatusChanged {
+                    session_id: session_id(),
+                    status: status_type,
+                });
+            }
+        }
+
+        "session.idle" => {
+            events.push(OpenCodeEvent::SessionStatusChanged {
+                session_id: session_id(),
+                status: "idle".to_string(),
+            });
+        }
+
+        "session.updated" | "session.created" | "session.diff" => {
+            // Informational — no action needed.
+        }
+
+        "permission.requested" => {
+            let permission_id = props
+                .get("id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let tool_name = props
+                .get("tool")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            let args = props
+                .get("args")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null);
+
+            events.push(OpenCodeEvent::PermissionRequired {
+                session_id: session_id(),
+                permission_id,
+                tool_name,
+                args,
+            });
+        }
+
+        _ => {
+            log::debug!("Unhandled OpenCode event type: {}", etype);
         }
     }
 

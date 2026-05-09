@@ -106,6 +106,24 @@ impl OpenCodeClient {
 
     // ── Messages ────────────────────────────────────────────────────────
 
+    /// Send a prompt and return the raw response body as a string (for debugging).
+    pub async fn raw_prompt(
+        &self,
+        session_id: &str,
+        req: &PromptRequest,
+    ) -> Result<String> {
+        let resp = self
+            .http
+            .post(format!("{}/session/{}/message", self.base_url, session_id))
+            .json(req)
+            .send()
+            .await
+            .context("prompt request failed")?
+            .error_for_status()
+            .context("prompt returned error status")?;
+        resp.text().await.context("failed to read prompt response body")
+    }
+
     /// Send a prompt and wait for the full response (synchronous mode).
     pub async fn prompt(
         &self,
@@ -231,3 +249,7 @@ impl OpenCodeClient {
         format!("{}/global/event", self.base_url)
     }
 }
+
+#[cfg(test)]
+#[path = "client_tests.rs"]
+mod tests;

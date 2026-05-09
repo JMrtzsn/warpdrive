@@ -21,3 +21,4 @@ uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+rustls = { workspace = true }
