@@ -452,13 +452,17 @@ fn map_to_proto_tool(tool_name: &str, args: &serde_json::Value) -> api::message:
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 fn extract_user_text(params: &RequestParams) -> String {
-    use super::AIAgentInput;
+    use super::{display_user_query_with_mode, AIAgentInput};
 
     params
         .input
         .iter()
         .filter_map(|input| match input {
-            AIAgentInput::UserQuery { query, .. } => Some(query.clone()),
+            AIAgentInput::UserQuery {
+                query,
+                user_query_mode,
+                ..
+            } => Some(display_user_query_with_mode(*user_query_mode, query)),
             _ => None,
         })
         .collect::<Vec<_>>()

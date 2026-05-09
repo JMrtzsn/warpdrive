@@ -55,12 +55,9 @@ impl SlashCommandRequest {
             return Some(Self::InitProjectRules);
         }
 
-        // Check if query starts with /compact and route to summarize conversation
-        if let Some(prompt) = query.strip_prefix(commands::COMPACT.name) {
-            return Some(Self::Summarize {
-                prompt: prompt.strip_prefix(' ').map(String::from),
-            });
-        }
+        // Check if query starts with /compact — pass through to normal query path
+        // so OpenCode handles summarization directly.
+        // (Previously intercepted as Summarize for Warp server.)
 
         None
     }
