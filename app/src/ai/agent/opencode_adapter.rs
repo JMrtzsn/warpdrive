@@ -115,6 +115,9 @@ pub async fn generate_opencode_output(
     let model_id = resolve_model_id(&params.model.to_string());
     log::info!("generate_opencode_output: resolved model={model_id:?}");
 
+    // Extract slash command mode and strip prefix from user text.
+    let (final_text, command_system_prompt) = extract_command_mode(&user_text);
+
     let client = guard.client.clone();
 
     // Determine if this is the first message (need CreateTask) or a follow-up.
@@ -127,19 +130,23 @@ pub async fn generate_opencode_output(
 
     drop(guard);
 
+    // Combine base system prompt (first message only) with command-specific instructions.
+    let system = match (is_first_message, command_system_prompt) {
+        (true, Some(cmd_prompt)) => Some(format!("{}\n\n{}", build_system_prompt(), cmd_prompt)),
+        (true, None) => Some(build_system_prompt()),
+        (false, Some(cmd_prompt)) => Some(cmd_prompt),
+        (false, None) => None,
+    };
+
     let prompt_req = PromptRequest {
-        parts: vec![MessagePart::Text { text: user_text }],
+        parts: vec![MessagePart::Text { text: final_text }],
         model: model_id.map(|id| ModelSelection {
             provider_id: infer_provider(&id),
             model_id: id,
         }),
         agent: None,
         no_reply: None,
-        system: if is_first_message {
-            Some(build_system_prompt())
-        } else {
-            None
-        },
+        system,
         tools: None,
     };
 
@@ -522,20 +529,78 @@ You can:
 - Search codebases (grep, glob)
 - Fetch web content
 
-## Slash Commands
-The user may prefix their message with these commands:
-- /plan <task> — Research the codebase and create a detailed plan before implementing
-- /orchestrate <task> — Break the task into subtasks for parallel execution
-- /compact — Summarize the conversation so far to free up context window
-
-When you see these prefixes, adjust your behavior accordingly.
-
 ## Guidelines
 - Be concise and direct
 - Show file paths when referencing code
 - Run commands to verify your work
 - Ask for clarification when requirements are ambiguous"#
     )
+}
+
+/// Extract slash command prefix from user text and return (stripped_text, optional_system_instruction).
+///
+/// Recognized commands:
+/// - `/plan <task>` → instruct the LLM to plan before implementing
+/// - `/orchestrate <task>` → instruct the LLM to break into parallel subtasks
+/// - `/compact [instructions]` → instruct the LLM to summarize the conversation
+fn extract_command_mode(text: &str) -> (String, Option<String>) {
+    if let Some(rest) = text.strip_prefix("/plan ") {
+        (
+            rest.to_string(),
+            Some(
+                "The user used the /plan command. Before implementing anything, thoroughly research \
+                 the codebase and create a detailed step-by-step plan. Outline what files need to \
+                 change, what the approach is, and any risks. Do NOT write code yet — only plan."
+                    .to_string(),
+            ),
+        )
+    } else if text == "/plan" {
+        (
+            "Create a plan for the current task.".to_string(),
+            Some(
+                "The user used the /plan command. Research the codebase and create a detailed plan. \
+                 Do NOT write code yet — only plan."
+                    .to_string(),
+            ),
+        )
+    } else if let Some(rest) = text.strip_prefix("/orchestrate ") {
+        (
+            rest.to_string(),
+            Some(
+                "The user used the /orchestrate command. Break this task into independent subtasks \
+                 that can be executed in parallel. For each subtask, describe what needs to be done, \
+                 which files are involved, and any dependencies between subtasks."
+                    .to_string(),
+            ),
+        )
+    } else if text == "/orchestrate" {
+        (
+            "Break the current task into parallel subtasks.".to_string(),
+            Some(
+                "The user used the /orchestrate command. Break the task into independent subtasks \
+                 that can be executed in parallel."
+                    .to_string(),
+            ),
+        )
+    } else if let Some(rest) = text.strip_prefix("/compact") {
+        let instructions = rest.trim();
+        let user_text = if instructions.is_empty() {
+            "Summarize this conversation so far.".to_string()
+        } else {
+            format!("Summarize this conversation. Focus on: {instructions}")
+        };
+        (
+            user_text,
+            Some(
+                "The user used the /compact command. Provide a concise summary of the entire \
+                 conversation so far, capturing all key decisions, code changes, and current state. \
+                 This summary will be used as context for future messages."
+                    .to_string(),
+            ),
+        )
+    } else {
+        (text.to_string(), None)
+    }
 }
 
 #[cfg(test)]

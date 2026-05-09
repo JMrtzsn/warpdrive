@@ -241,10 +241,49 @@ fn real_response_shape_step_text_step() {
 fn system_prompt_contains_environment_info() {
     let prompt = build_system_prompt();
     assert!(prompt.contains("Warpdrive"), "should mention Warpdrive");
-    assert!(prompt.contains("/plan"), "should document /plan command");
-    assert!(prompt.contains("/compact"), "should document /compact command");
-    assert!(prompt.contains("/orchestrate"), "should document /orchestrate command");
     assert!(prompt.contains("Working directory:"), "should include CWD");
     assert!(prompt.contains("Shell:"), "should include shell");
     assert!(prompt.contains("OS:"), "should include OS");
+}
+
+#[test]
+fn extract_command_mode_plan() {
+    let (text, system) = extract_command_mode("/plan build a REST API");
+    assert_eq!(text, "build a REST API");
+    assert!(system.unwrap().contains("/plan"));
+}
+
+#[test]
+fn extract_command_mode_plan_bare() {
+    let (text, system) = extract_command_mode("/plan");
+    assert!(!text.is_empty());
+    assert!(system.is_some());
+}
+
+#[test]
+fn extract_command_mode_orchestrate() {
+    let (text, system) = extract_command_mode("/orchestrate deploy services");
+    assert_eq!(text, "deploy services");
+    assert!(system.unwrap().contains("/orchestrate"));
+}
+
+#[test]
+fn extract_command_mode_compact() {
+    let (text, system) = extract_command_mode("/compact");
+    assert!(text.contains("Summarize"));
+    assert!(system.unwrap().contains("/compact"));
+}
+
+#[test]
+fn extract_command_mode_compact_with_instructions() {
+    let (text, system) = extract_command_mode("/compact focus on architecture decisions");
+    assert!(text.contains("architecture decisions"));
+    assert!(system.is_some());
+}
+
+#[test]
+fn extract_command_mode_normal_text() {
+    let (text, system) = extract_command_mode("just a normal message");
+    assert_eq!(text, "just a normal message");
+    assert!(system.is_none());
 }
