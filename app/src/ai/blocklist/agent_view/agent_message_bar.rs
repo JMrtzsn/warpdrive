@@ -737,11 +737,7 @@ impl MessageProvider<AgentMessageArgs<'_>> for ForkSlashCommandMessageProducer {
         let is_fork_family = command_name == commands::FORK.name
             || command_name == commands::FORK_FROM.name
             || command_name == commands::FORK_AND_COMPACT.name;
-        #[cfg(not(target_family = "wasm"))]
-        let is_continue_locally = command_name == commands::CONTINUE_LOCALLY.name;
-        #[cfg(target_family = "wasm")]
-        let is_continue_locally = false;
-        if !is_fork_family && !is_continue_locally {
+        if !is_fork_family {
             return None;
         }
         let modifier_keystroke = if cfg!(target_os = "macos") {
@@ -759,10 +755,10 @@ impl MessageProvider<AgentMessageArgs<'_>> for ForkSlashCommandMessageProducer {
             }
         };
 
-        // `/fork` and `/continue-locally` open in a new pane with Enter and a new tab with
+        // `/fork` opens in a new pane with Enter and a new tab with
         // Cmd/Ctrl+Enter. Other fork-like commands open in the current pane with Enter and a new
         // pane with Cmd/Ctrl+Enter.
-        let primary_to_new_pane = command_name == commands::FORK.name || is_continue_locally;
+        let primary_to_new_pane = command_name == commands::FORK.name;
         let (primary_label, secondary_label) = if primary_to_new_pane {
             (" new pane", " new tab")
         } else {

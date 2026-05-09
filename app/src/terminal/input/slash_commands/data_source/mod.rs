@@ -275,23 +275,6 @@ impl SlashCommandDataSource {
                     command.name != commands::FEEDBACK.name
                         || !crate::workspace::is_feedback_skill_available(ctx)
                 })
-                // /continue-locally only applies to cloud Oz conversations. Local conversations
-                // and non-Oz cloud runs (Claude, Gemini) are filtered out so the slash menu
-                // doesn't surface a no-op command.
-                .filter(|(_, command)| {
-                    #[cfg(not(target_family = "wasm"))]
-                    {
-                        command.name != commands::CONTINUE_LOCALLY.name
-                            || active_conversation_is_cloud_oz
-                    }
-                    #[cfg(target_family = "wasm")]
-                    {
-                        let _ = command;
-                        true
-                    }
-                })
-                // /host is only useful when a default self-hosted host is configured.
-                .filter(|(_, command)| command.name != commands::HOST.name || has_default_host)
                 // When CLI agent input is open, restrict to the explicit allowlist.
                 .filter(|(_, command)| {
                     !is_cli_agent_input

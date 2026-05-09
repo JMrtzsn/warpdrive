@@ -3267,10 +3267,8 @@ impl SettingsWidget for GlobalAIWidget {
         let is_ai_disabled_due_to_remote_session_org_policy =
             AISettings::as_ref(app).is_ai_disabled_due_to_remote_session_org_policy(app);
 
-        let is_anonymous = AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out()
-            && !crate::ai::agent::backend_switch::should_use_opencode();
+        // OpenCode backend is always active, so anonymous state never applies.
+        let is_anonymous = false;
 
         let mut row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
@@ -3642,19 +3640,10 @@ impl SettingsWidget for UsageWidget {
         )
         .with_hyperlink_font_color(appearance.theme().accent().into_solid());
 
-        if AuthStateProvider::as_ref(app)
-            .get()
-            .is_anonymous_or_logged_out()
-            && !crate::ai::agent::backend_switch::should_use_opencode()
-        {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|_, ctx, _| {
-                ctx.dispatch_typed_action(AISettingsPageAction::AttemptLoginGatedUpgrade);
-            });
-        } else {
-            upgrade_cta = upgrade_cta.register_default_click_handlers(|url, ctx, _| {
-                ctx.dispatch_typed_action(AISettingsPageAction::HyperlinkClick(url));
-            })
-        }
+        // OpenCode backend is always active; anonymous login-gated path is dead.
+        upgrade_cta = upgrade_cta.register_default_click_handlers(|url, ctx, _| {
+            ctx.dispatch_typed_action(AISettingsPageAction::HyperlinkClick(url));
+        });
 
         Flex::column()
             .with_children([

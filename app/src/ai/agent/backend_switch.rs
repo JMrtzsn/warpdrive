@@ -1,4 +1,6 @@
-//! Feature-flag controlled switch between Warp server and OpenCode backends.
+//! OpenCode is the sole AI backend for Warpdrive.
+//!
+//! The sidecar is lazily started on first use.
 
 use std::sync::Arc;
 
@@ -8,41 +10,29 @@ use tokio::sync::Mutex;
 
 use super::api::{ConvertToAPITypeError, RequestParams, ResponseStream as ApiResponseStream};
 use super::opencode_adapter::{generate_opencode_output, OpenCodeAdapter};
-use crate::ai::agent::api::generate_multi_agent_output;
-use crate::server::server_api::ServerApi;
 
 /// Global OpenCode adapter instance (lazily initialized).
 static OPENCODE_ADAPTER: Lazy<Option<Arc<Mutex<OpenCodeAdapter>>>> = Lazy::new(|| {
     let binary = find_opencode_binary()?;
     let working_dir = std::env::current_dir().ok()?;
-    // Use port 14096 to avoid conflicts with user's opencode instance.
     let sidecar = SidecarManager::new(binary, working_dir).with_port(14096);
     Some(Arc::new(Mutex::new(OpenCodeAdapter::with_sidecar(sidecar))))
 });
 
-/// Check whether the OpenCode backend should be used.
-/// Defaults to true — set WARP_USE_OPENCODE=0 to disable.
-pub fn should_use_opencode() -> bool {
-    if let Ok(val) = std::env::var("WARP_USE_OPENCODE") {
-        return val == "1" || val == "true";
-    }
-    true
-}
-
-/// Unified entry point for generating agent output.
-///
-/// Routes to OpenCode or Warp server based on `should_use_opencode()`.
+/// Generate agent output via OpenCode.
 pub async fn generate_agent_output(
-    server_api: Arc<ServerApi>,
+    _server_api: Arc<crate::server::server_api::ServerApi>,
     params: RequestParams,
     cancellation_rx: futures::channel::oneshot::Receiver<()>,
 ) -> Result<ApiResponseStream, ConvertToAPITypeError> {
-    if should_use_opencode() {
-        if let Some(adapter) = OPENCODE_ADAPTER.as_ref() {
-            return generate_opencode_output(adapter.clone(), params, cancellation_rx).await;
-        }
-        log::warn!("WARP_USE_OPENCODE is set but opencode binary not found in PATH; falling back to Warp server");
-    }
+    let adapter = OPENCODE_ADAPTER
+        .as_ref()
+        .ok_or_else(|| {
+            log::error!("OpenCode binary not found in PATH");
+            ConvertToAPITypeError::Other(
+                anyhow::anyhow!("OpenCode binary not found. Install opencode and ensure it's on PATH.").into(),
+            )
+        })?;
 
-    generate_multi_agent_output(server_api, params, cancellation_rx).await
+    generate_opencode_output(adapter.clone(), params, cancellation_rx).await
 }

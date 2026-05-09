@@ -431,20 +431,6 @@ impl Input {
                     origin: AgentViewEntryOrigin::SlashCommand { trigger },
                 });
             }
-            cloud_agent if command.name == commands::CLOUD_AGENT.name => {
-                let prompt = argument.and_then(|argument| {
-                    let trimmed = argument.trim();
-                    if trimmed.is_empty() {
-                        None
-                    } else {
-                        Some(trimmed.to_owned())
-                    }
-                });
-
-                ctx.emit(Event::EnterCloudAgentView {
-                    initial_prompt: prompt,
-                });
-            }
             create_docker_sandbox if command.name == commands::CREATE_DOCKER_SANDBOX.name => {
                 ctx.emit(Event::CreateDockerSandbox);
             }
@@ -528,19 +514,6 @@ impl Input {
                 };
 
                 ctx.dispatch_typed_action(&WorkspaceAction::SetActiveTabColor(color));
-            }
-            create_env if command.name == commands::CREATE_ENVIRONMENT.name => {
-                // If the user included args after the slash command, treat them as repo paths/URLs.
-                let repos = argument
-                    .map(|arg| {
-                        arg.split_whitespace()
-                            .filter(|s| !s.is_empty())
-                            .map(|s| s.to_string())
-                            .collect()
-                    })
-                    .unwrap_or_default();
-
-                ctx.emit(Event::TriggerEnvironmentSetup { repos });
             }
             create_project if command.name == commands::CREATE_NEW_PROJECT.name => {
                 if argument.is_none_or(|args| args.is_empty()) {
@@ -734,48 +707,6 @@ impl Input {
                 // Open the skill selector menu for invocation - skill command will be inserted into buffer
                 self.open_invoke_skill_selector(ctx);
             }
-            host if command.name == commands::HOST.name => {
-                if !self.is_cloud_mode_input_v2_composing(ctx) {
-                    return false;
-                }
-                // Only open the host selector when a default host is configured.
-                if self
-                    .host_selector()
-                    .is_none_or(|h| !h.as_ref(ctx).has_default_host())
-                {
-                    return false;
-                }
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.set_mode(InputSuggestionsMode::Closed, ctx);
-                });
-                self.clear_buffer_and_reset_undo_stack(ctx);
-                self.open_v2_host_selector(ctx);
-                return true;
-            }
-            harness if command.name == commands::HARNESS.name => {
-                if !self.is_cloud_mode_input_v2_composing(ctx) {
-                    // Defensive: the command is registered only when the V2 flag is on and its
-                    // availability requires CLOUD_AGENT_V2, so this branch should be unreachable.
-                    return false;
-                }
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.set_mode(InputSuggestionsMode::Closed, ctx);
-                });
-                self.clear_buffer_and_reset_undo_stack(ctx);
-                self.open_v2_harness_selector(ctx);
-                return true;
-            }
-            environment if command.name == commands::ENVIRONMENT.name => {
-                if !self.is_cloud_mode_input_v2_composing(ctx) {
-                    return false;
-                }
-                self.suggestions_mode_model.update(ctx, |model, ctx| {
-                    model.set_mode(InputSuggestionsMode::Closed, ctx);
-                });
-                self.clear_buffer_and_reset_undo_stack(ctx);
-                self.open_v2_environment_selector(ctx);
-                return true;
-            }
             models if command.name == commands::MODEL.name => {
                 if self.is_cloud_mode_input_v2_composing(ctx) {
                     self.suggestions_mode_model.update(ctx, |model, ctx| {
@@ -811,86 +742,6 @@ impl Input {
             rewind if command.name == commands::REWIND.name => {
                 self.open_rewind_menu(ctx);
             }
-            pr_comments if command.name == commands::PR_COMMENTS.name => {
-                if !FeatureFlag::PRCommentsSlashCommand.is_enabled() {
-                    return false;
-                }
-
-                let Some(repo_path) = self
-                    .active_session_path_if_local(ctx)
-                    .map(|path| path.to_path_buf())
-                    .map(|path| path.to_string_lossy().to_string())
-                else {
-                    log::error!("Expected a valid working directory since /pr-comments is only available from the terminal");
-                    return false;
-                };
-
-                self.ai_controller.update(ctx, move |controller, ctx| {
-                    controller.send_slash_command_request(
-                        SlashCommandRequest::FetchReviewComments { repo_path },
-                        ctx,
-                    )
-                });
-            }
-            usage if command.name == commands::USAGE.name => {
-                ctx.dispatch_typed_action(&TerminalAction::OpenBillingAndUsagePane);
-            }
-            remote_control if command.name == commands::REMOTE_CONTROL.name => {
-                if !FeatureFlag::CreatingSharedSessions.is_enabled()
-                    || !FeatureFlag::HOARemoteControl.is_enabled()
-                {
-                    return false;
-                }
-                if self
-                    .model
-                    .lock()
-                    .shared_session_status()
-                    .is_sharer_or_viewer()
-                {
-                    show_error_toast("Session is already being shared".to_owned(), ctx);
-                    return true;
-                }
-                ctx.emit(Event::StartRemoteControl);
-            }
-            cost if command.name == commands::COST.name => {
-                let history = BlocklistAIHistoryModel::handle(ctx);
-                let conversation = history
-                    .as_ref(ctx)
-                    .active_conversation(self.terminal_view_id);
-                if conversation.is_none() {
-                    show_error_toast(
-                        "Cannot show conversation cost: no active conversation".to_owned(),
-                        ctx,
-                    );
-                } else if conversation.is_some_and(|c| c.is_empty()) {
-                    show_error_toast(
-                        "Cannot show conversation cost: conversation is empty".to_owned(),
-                        ctx,
-                    );
-                } else if conversation.is_some_and(|c| !c.status().is_done()) {
-                    show_error_toast(
-                        "Cannot show conversation cost: conversation is in progress".to_owned(),
-                        ctx,
-                    );
-                } else {
-                    ctx.dispatch_typed_action(&TerminalAction::ToggleUsageFooter);
-                }
-            }
-            #[cfg(all(feature = "local_fs", not(target_family = "wasm")))]
-            move_to_cloud if command.name == commands::MOVE_TO_CLOUD.name => {
-                if !FeatureFlag::OzHandoff.is_enabled()
-                    || !FeatureFlag::HandoffLocalCloud.is_enabled()
-                {
-                    return false;
-                }
-                // The workspace handler falls through to splitting a fresh cloud-mode
-                // pane when there's nothing to hand off, so we don't need to gate on
-                // `selected_conversation_id` here — the slash command always opens
-                // the new pane.
-                ctx.dispatch_typed_action(&WorkspaceAction::OpenLocalToCloudHandoffPane {
-                    initial_prompt: argument.cloned().filter(|s| !s.is_empty()),
-                });
-            }
             fork if command.name == commands::FORK.name => {
                 let Some(conversation_id) = self
                     .ai_context_model
@@ -919,48 +770,6 @@ impl Input {
             fork_from if command.name == commands::FORK_FROM.name => {
                 self.open_user_query_menu(UserQueryMenuAction::ForkFrom, ctx);
                 return true;
-            }
-            #[cfg(not(target_family = "wasm"))]
-            continue_locally if command.name == commands::CONTINUE_LOCALLY.name => {
-                let Some(conversation_id) = self
-                    .ai_context_model
-                    .as_ref(ctx)
-                    .selected_conversation_id(ctx)
-                else {
-                    show_error_toast(
-                        "/continue-locally requires an active conversation".to_owned(),
-                        ctx,
-                    );
-                    return true;
-                };
-
-                if !conversation_is_cloud_oz_for_slash_command(conversation_id, ctx) {
-                    show_error_toast(
-                        "/continue-locally is only available for cloud Oz conversations".to_owned(),
-                        ctx,
-                    );
-                    return true;
-                }
-
-                let destination = if trigger.is_cmd_or_ctrl_enter() {
-                    ForkedConversationDestination::NewTab
-                } else {
-                    ForkedConversationDestination::SplitPane
-                };
-
-                send_telemetry_from_ctx!(
-                    AgentManagementTelemetryEvent::SlashCommandContinueLocally,
-                    ctx
-                );
-
-                ctx.dispatch_typed_action(&WorkspaceAction::ForkAIConversation {
-                    conversation_id,
-                    fork_from_exchange: None,
-                    summarize_after_fork: false,
-                    summarization_prompt: None,
-                    initial_prompt: argument.cloned(),
-                    destination,
-                });
             }
             fork_and_compact if command.name == commands::FORK_AND_COMPACT.name => {
                 let Some(conversation_id) = self

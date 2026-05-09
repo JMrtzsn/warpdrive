@@ -517,14 +517,8 @@ impl AgentDriver {
             )
         );
 
-        // If we're not logged in, the root view will go to an auth screen, and all subsequent steps will fail.
-        // This should be impossible, since we enforce login before reaching this point.
-        // When using the OpenCode backend, auth is not required.
-        if !crate::ai::agent::backend_switch::should_use_opencode()
-            && !AuthStateProvider::as_ref(ctx).get().is_logged_in()
-        {
-            return Err(AgentDriverError::NotLoggedIn);
-        }
+        // OpenCode backend is always active — auth check is no longer needed.
+        // (Previously returned AgentDriverError::NotLoggedIn when not using OpenCode.)
 
         // Extract the conversation ID if we're restoring a conversation.
         // This will be used when submitting the initial query to continue the conversation.
