@@ -1497,10 +1497,11 @@ impl AISettings {
     }
 
     pub fn is_any_ai_enabled(&self, app: &AppContext) -> bool {
-        // Disable AI for anonymous and logged-out users.
+        // Disable AI for anonymous and logged-out users, unless OpenCode backend is active.
         let is_anonymous_or_logged_out = AuthStateProvider::as_ref(app)
             .get()
-            .is_anonymous_or_logged_out();
+            .is_anonymous_or_logged_out()
+            && !crate::ai::agent::backend_switch::should_use_opencode();
 
         *self.is_any_ai_enabled
             && !is_anonymous_or_logged_out

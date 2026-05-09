@@ -131,6 +131,11 @@ impl PromptAlertView {
     }
 
     pub fn determine_state(app: &AppContext) -> PromptAlertState {
+        // When using the OpenCode backend, skip all alert checks — no Warp account needed.
+        if crate::ai::agent::backend_switch::should_use_opencode() {
+            return PromptAlertState::NoAlert;
+        }
+
         // First, if the user is offline, no AI features will work.
         if !NetworkStatus::as_ref(app).is_online() {
             return PromptAlertState::NoConnection;

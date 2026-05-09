@@ -3269,7 +3269,8 @@ impl SettingsWidget for GlobalAIWidget {
 
         let is_anonymous = AuthStateProvider::as_ref(app)
             .get()
-            .is_anonymous_or_logged_out();
+            .is_anonymous_or_logged_out()
+            && !crate::ai::agent::backend_switch::should_use_opencode();
 
         let mut row = Flex::row()
             .with_main_axis_size(MainAxisSize::Max)
@@ -3644,6 +3645,7 @@ impl SettingsWidget for UsageWidget {
         if AuthStateProvider::as_ref(app)
             .get()
             .is_anonymous_or_logged_out()
+            && !crate::ai::agent::backend_switch::should_use_opencode()
         {
             upgrade_cta = upgrade_cta.register_default_click_handlers(|_, ctx, _| {
                 ctx.dispatch_typed_action(AISettingsPageAction::AttemptLoginGatedUpgrade);

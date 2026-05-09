@@ -21,11 +21,12 @@ static OPENCODE_ADAPTER: Lazy<Option<Arc<Mutex<OpenCodeAdapter>>>> = Lazy::new(|
 });
 
 /// Check whether the OpenCode backend should be used.
+/// Defaults to true — set WARP_USE_OPENCODE=0 to disable.
 pub fn should_use_opencode() -> bool {
     if let Ok(val) = std::env::var("WARP_USE_OPENCODE") {
         return val == "1" || val == "true";
     }
-    cfg!(feature = "opencode_backend")
+    true
 }
 
 /// Unified entry point for generating agent output.
