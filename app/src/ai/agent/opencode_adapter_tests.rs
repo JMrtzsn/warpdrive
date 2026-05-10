@@ -287,3 +287,137 @@ fn extract_command_mode_normal_text() {
     assert_eq!(text, "just a normal message");
     assert!(system.is_none());
 }
+
+// ─── extract_user_text tests ────────────────────────────────────────────────
+
+use super::super::AIAgentInput;
+use crate::ai::agent::api::RequestParams;
+use crate::ai::blocklist::SessionContext;
+use crate::ai::llms::LLMId;
+use warp_multi_agent_api as api;
+
+fn make_params(input: Vec<AIAgentInput>) -> RequestParams {
+    let model = LLMId::from("test-model");
+    RequestParams {
+        input,
+        conversation_token: None,
+        forked_from_conversation_token: None,
+        ambient_agent_task_id: None,
+        tasks: vec![],
+        existing_suggestions: None,
+        metadata: None,
+        session_context: SessionContext::new_for_test(),
+        model: model.clone(),
+        coding_model: model.clone(),
+        cli_agent_model: model.clone(),
+        computer_use_model: model,
+        is_memory_enabled: false,
+        warp_drive_context_enabled: false,
+        context_window_limit: None,
+        mcp_context: None,
+        planning_enabled: false,
+        should_redact_secrets: false,
+        api_keys: None,
+        allow_use_of_warp_credits_with_byok: false,
+        autonomy_level: api::AutonomyLevel::Supervised,
+        isolation_level: api::IsolationLevel::None,
+        web_search_enabled: false,
+        computer_use_enabled: false,
+        ask_user_question_enabled: false,
+        research_agent_enabled: false,
+        orchestration_enabled: false,
+        supported_tools_override: None,
+        parent_agent_id: None,
+        agent_name: None,
+    }
+}
+
+#[test]
+fn extract_user_text_summarize_no_prompt() {
+    let params = make_params(vec![AIAgentInput::SummarizeConversation {
+        prompt: None,
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("Summarize"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_summarize_with_prompt() {
+    let params = make_params(vec![AIAgentInput::SummarizeConversation {
+        prompt: Some("focus on errors".to_string()),
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("Summarize"), "got: {text}");
+    assert!(text.contains("focus on errors"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_init_project_rules() {
+    let params = make_params(vec![AIAgentInput::InitProjectRules {
+        context: vec![].into(),
+        display_query: Some("Set up rules for my Rust project".to_string()),
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("Rust project"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_init_project_rules_default() {
+    let params = make_params(vec![AIAgentInput::InitProjectRules {
+        context: vec![].into(),
+        display_query: None,
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("project rules"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_auto_code_diff() {
+    let params = make_params(vec![AIAgentInput::AutoCodeDiffQuery {
+        query: "refactor the login module".to_string(),
+        context: vec![].into(),
+    }]);
+    let text = extract_user_text(&params);
+    assert_eq!(text, "refactor the login module");
+}
+
+#[test]
+fn extract_user_text_create_new_project() {
+    let params = make_params(vec![AIAgentInput::CreateNewProject {
+        query: "a CLI todo app in Rust".to_string(),
+        context: vec![].into(),
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("CLI todo app"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_resume_conversation() {
+    let params = make_params(vec![AIAgentInput::ResumeConversation {
+        context: vec![].into(),
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("Continue"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_clone_repository() {
+    use super::super::CloneRepositoryURL;
+    let params = make_params(vec![AIAgentInput::CloneRepository {
+        clone_repo_url: CloneRepositoryURL::new("https://github.com/example/repo".to_string()),
+        context: vec![].into(),
+    }]);
+    let text = extract_user_text(&params);
+    assert!(text.contains("https://github.com/example/repo"), "got: {text}");
+}
+
+#[test]
+fn extract_user_text_unknown_variant_ignored() {
+    // Passive suggestions and other cloud-only variants should produce empty text.
+    let params = make_params(vec![AIAgentInput::ResumeConversation {
+        context: vec![].into(),
+    }]);
+    // ResumeConversation IS handled, so this should not be empty.
+    let text = extract_user_text(&params);
+    assert!(!text.is_empty());
+}

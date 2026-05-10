@@ -2563,6 +2563,10 @@ impl CloneRepositoryURL {
     pub fn into_url(self) -> String {
         self.url
     }
+
+    pub fn url(&self) -> &str {
+        &self.url
+    }
 }
 
 impl Display for AIAgentInput {

@@ -474,6 +474,54 @@ fn extract_user_text(params: &RequestParams) -> String {
                 user_query_mode,
                 ..
             } => Some(display_user_query_with_mode(*user_query_mode, query)),
+
+            AIAgentInput::SummarizeConversation { prompt } => {
+                let base = "Summarize this conversation.";
+                Some(match prompt {
+                    Some(p) if !p.is_empty() => format!("{base} {p}"),
+                    _ => base.to_string(),
+                })
+            }
+
+            AIAgentInput::InitProjectRules { display_query, .. } => Some(
+                display_query
+                    .clone()
+                    .unwrap_or_else(|| "Generate project rules for this repository.".to_string()),
+            ),
+
+            AIAgentInput::ActionResult { result, .. } => {
+                Some(format!("Action result: {result}"))
+            }
+
+            AIAgentInput::AutoCodeDiffQuery { query, .. } => Some(query.clone()),
+
+            AIAgentInput::CreateNewProject { query, .. } => {
+                Some(format!("Create a new project: {query}"))
+            }
+
+            AIAgentInput::CloneRepository { clone_repo_url, .. } => {
+                Some(format!("Clone the repository: {}", clone_repo_url.url()))
+            }
+
+            AIAgentInput::ResumeConversation { .. } => {
+                Some("Continue the conversation.".to_string())
+            }
+
+            AIAgentInput::InvokeSkill {
+                skill, user_query, ..
+            } => {
+                let skill_name = &skill.name;
+                match user_query {
+                    Some(uq) => Some(format!(
+                        "Invoke skill '{skill_name}': {}",
+                        uq.query
+                    )),
+                    None => Some(format!("Invoke skill '{skill_name}'.")),
+                }
+            }
+
+            // Variants that are cloud-only, orchestration-internal, or passive —
+            // these don't produce user-visible text for the LLM.
             _ => None,
         })
         .collect::<Vec<_>>()

@@ -113,7 +113,7 @@ pub struct RequestParams {
     pub context_window_limit: Option<u32>,
     pub mcp_context: Option<MCPContext>,
     pub planning_enabled: bool,
-    should_redact_secrets: bool,
+    pub(super) should_redact_secrets: bool,
 
     /// User-provided API keys for AI providers (BYO API Key).
     pub api_keys: Option<warp_multi_agent_api::request::settings::ApiKeys>,
