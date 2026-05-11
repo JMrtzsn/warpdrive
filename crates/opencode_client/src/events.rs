@@ -58,15 +58,10 @@ pub enum OpenCodeEvent {
     },
 
     /// Session status changed (idle, running, error).
-    SessionStatusChanged {
-        session_id: String,
-        status: String,
-    },
+    SessionStatusChanged { session_id: String, status: String },
 
     /// An error occurred.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 
     /// Stream ended.
     Closed,
@@ -201,10 +196,7 @@ pub(crate) fn parse_sse_message(event_type: &str, data: &str) -> Result<Vec<Open
                             .unwrap_or("")
                             .to_string();
                         let state = part.get("state").and_then(|v| v.as_str()).unwrap_or("");
-                        let args = part
-                            .get("args")
-                            .cloned()
-                            .unwrap_or(serde_json::Value::Null);
+                        let args = part.get("args").cloned().unwrap_or(serde_json::Value::Null);
 
                         match state {
                             "completed" | "error" => {

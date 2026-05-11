@@ -1,0 +1,17 @@
+#!/bin/bash
+# Wrapper xcrun that intercepts metal/metallib calls
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ARGS=("$@")
+
+for (( i=0; i<${#ARGS[@]}; i++ )); do
+    case "${ARGS[$i]}" in
+        metal)
+            exec "$SCRIPT_DIR/metal" "${ARGS[@]:$((i+1))}"
+            ;;
+        metallib)
+            exec "$SCRIPT_DIR/metallib" "${ARGS[@]:$((i+1))}"
+            ;;
+    esac
+done
+# For anything else, call real xcrun
+exec /usr/bin/xcrun "$@"

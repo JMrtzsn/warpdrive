@@ -1,0 +1,9 @@
+#!/bin/bash
+# Stub metal compiler that produces empty .air files
+# Used when Metal Toolchain is not installed
+for arg in "$@"; do
+    if [[ "$arg" == *.air ]]; then
+        touch "$arg"
+    fi
+done
+exit 0

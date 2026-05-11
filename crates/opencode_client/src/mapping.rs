@@ -5,7 +5,6 @@
 ///
 /// Warp actions:   RequestCommandOutput, RequestFileEdits, ReadFiles, Grep,
 ///                 FileGlobV2, AskUserQuestion, ReadSkill, CallMCPTool, etc.
-
 use serde_json::Value;
 
 #[cfg(test)]
@@ -22,9 +21,7 @@ pub enum MappedAction {
         timeout: Option<u64>,
     },
     /// File read.
-    ReadFiles {
-        paths: Vec<FileReadTarget>,
-    },
+    ReadFiles { paths: Vec<FileReadTarget> },
     /// File edit (search/replace).
     EditFile {
         file_path: String,
@@ -32,14 +29,9 @@ pub enum MappedAction {
         new_string: String,
     },
     /// File write (create/overwrite).
-    WriteFile {
-        file_path: String,
-        content: String,
-    },
+    WriteFile { file_path: String, content: String },
     /// Apply a patch.
-    ApplyPatch {
-        patch_text: String,
-    },
+    ApplyPatch { patch_text: String },
     /// Grep search.
     Grep {
         pattern: String,
@@ -52,18 +44,11 @@ pub enum MappedAction {
         path: Option<String>,
     },
     /// Ask the user a question.
-    AskQuestion {
-        questions: Vec<QuestionItem>,
-    },
+    AskQuestion { questions: Vec<QuestionItem> },
     /// Web fetch.
-    WebFetch {
-        url: String,
-    },
+    WebFetch { url: String },
     /// Unknown/unsupported tool — pass through as generic.
-    Unknown {
-        tool_name: String,
-        args: Value,
-    },
+    Unknown { tool_name: String, args: Value },
 }
 
 #[derive(Debug, Clone)]
@@ -98,10 +83,20 @@ pub fn map_tool_call(tool_name: &str, args: &Value) -> MappedAction {
                 .and_then(|v| v.as_str())
                 .unwrap_or("")
                 .to_string();
-            let offset = args.get("offset").and_then(|v| v.as_u64()).map(|v| v as usize);
-            let limit = args.get("limit").and_then(|v| v.as_u64()).map(|v| v as usize);
+            let offset = args
+                .get("offset")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize);
+            let limit = args
+                .get("limit")
+                .and_then(|v| v.as_u64())
+                .map(|v| v as usize);
             MappedAction::ReadFiles {
-                paths: vec![FileReadTarget { path, offset, limit }],
+                paths: vec![FileReadTarget {
+                    path,
+                    offset,
+                    limit,
+                }],
             }
         }
         "edit" => {
@@ -159,7 +154,10 @@ pub fn map_tool_call(tool_name: &str, args: &Value) -> MappedAction {
                 .unwrap_or("")
                 .to_string();
             let path = args.get("path").and_then(|v| v.as_str()).map(String::from);
-            let include = args.get("include").and_then(|v| v.as_str()).map(String::from);
+            let include = args
+                .get("include")
+                .and_then(|v| v.as_str())
+                .map(String::from);
             MappedAction::Grep {
                 pattern,
                 path,
@@ -189,7 +187,9 @@ pub fn map_tool_call(tool_name: &str, args: &Value) -> MappedAction {
                                 .map(|opts| {
                                     opts.iter()
                                         .filter_map(|o| {
-                                            o.get("label").and_then(|l| l.as_str()).map(String::from)
+                                            o.get("label")
+                                                .and_then(|l| l.as_str())
+                                                .map(String::from)
                                         })
                                         .collect()
                                 })

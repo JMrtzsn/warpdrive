@@ -25,14 +25,13 @@ pub async fn generate_agent_output(
     params: RequestParams,
     cancellation_rx: futures::channel::oneshot::Receiver<()>,
 ) -> Result<ApiResponseStream, ConvertToAPITypeError> {
-    let adapter = OPENCODE_ADAPTER
-        .as_ref()
-        .ok_or_else(|| {
-            log::error!("OpenCode binary not found in PATH");
-            ConvertToAPITypeError::Other(
-                anyhow::anyhow!("OpenCode binary not found. Install opencode and ensure it's on PATH.").into(),
-            )
-        })?;
+    let adapter = OPENCODE_ADAPTER.as_ref().ok_or_else(|| {
+        log::error!("OpenCode binary not found in PATH");
+        ConvertToAPITypeError::Other(
+            anyhow::anyhow!("OpenCode binary not found. Install opencode and ensure it's on PATH.")
+                .into(),
+        )
+    })?;
 
     generate_opencode_output(adapter.clone(), params, cancellation_rx).await
 }

@@ -1,0 +1,8 @@
+#!/bin/bash
+# Stub metallib linker that produces empty .metallib files
+for arg in "$@"; do
+    if [[ "$arg" == *.metallib ]]; then
+        touch "$arg"
+    fi
+done
+exit 0

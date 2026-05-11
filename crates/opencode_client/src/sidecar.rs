@@ -98,7 +98,10 @@ impl SidecarManager {
     pub async fn stop(&self) -> Result<()> {
         let mut guard = self.process.lock().await;
         if let Some(mut child) = guard.take() {
-            child.kill().await.context("failed to kill opencode process")?;
+            child
+                .kill()
+                .await
+                .context("failed to kill opencode process")?;
             log::info!("OpenCode sidecar stopped");
         }
         Ok(())
@@ -171,10 +174,7 @@ impl Drop for SidecarManager {
 /// Find the opencode binary in PATH or common locations.
 pub fn find_opencode_binary() -> Option<PathBuf> {
     // Check PATH first.
-    if let Ok(output) = std::process::Command::new("which")
-        .arg("opencode")
-        .output()
-    {
+    if let Ok(output) = std::process::Command::new("which").arg("opencode").output() {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
@@ -184,10 +184,7 @@ pub fn find_opencode_binary() -> Option<PathBuf> {
     }
 
     // Common installation locations.
-    let candidates = [
-        "/usr/local/bin/opencode",
-        "/opt/homebrew/bin/opencode",
-    ];
+    let candidates = ["/usr/local/bin/opencode", "/opt/homebrew/bin/opencode"];
 
     for candidate in &candidates {
         let path = PathBuf::from(candidate);

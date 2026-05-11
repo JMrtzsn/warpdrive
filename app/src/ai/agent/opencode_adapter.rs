@@ -7,8 +7,8 @@
 use std::sync::Arc;
 
 use opencode_client::{
-    map_tool_call, CreateSessionRequest, MappedAction, MessagePart,
-    ModelSelection, OpenCodeClient, PromptRequest, SidecarManager,
+    map_tool_call, CreateSessionRequest, MappedAction, MessagePart, ModelSelection, OpenCodeClient,
+    PromptRequest, SidecarManager,
 };
 use tokio::sync::Mutex;
 use warp_multi_agent_api as api;
@@ -101,13 +101,10 @@ pub async fn generate_opencode_output(
         }
     }
 
-    let session_id = guard
-        .ensure_session()
-        .await
-        .map_err(|e| {
-            log::error!("generate_opencode_output: ensure_session failed: {e:#}");
-            ConvertToAPITypeError::Other(e.into())
-        })?;
+    let session_id = guard.ensure_session().await.map_err(|e| {
+        log::error!("generate_opencode_output: ensure_session failed: {e:#}");
+        ConvertToAPITypeError::Other(e.into())
+    })?;
     log::info!("generate_opencode_output: session_id={session_id}");
 
     let user_text = extract_user_text(&params);
@@ -152,13 +149,10 @@ pub async fn generate_opencode_output(
 
     // Use synchronous prompt — blocks until LLM completes.
     log::info!("generate_opencode_output: sending synchronous prompt");
-    let response = client
-        .prompt(&session_id, &prompt_req)
-        .await
-        .map_err(|e| {
-            log::error!("generate_opencode_output: prompt failed: {e:#}");
-            ConvertToAPITypeError::Other(e.into())
-        })?;
+    let response = client.prompt(&session_id, &prompt_req).await.map_err(|e| {
+        log::error!("generate_opencode_output: prompt failed: {e:#}");
+        ConvertToAPITypeError::Other(e.into())
+    })?;
     log::info!(
         "generate_opencode_output: got response with {} parts",
         response.parts.len()
@@ -167,10 +161,7 @@ pub async fn generate_opencode_output(
     // Build Warp events from the response.
     let events = build_warp_events(&response, is_first_message, &run_id, &request_id);
 
-    log::info!(
-        "generate_opencode_output: emitting {} events",
-        events.len()
-    );
+    log::info!("generate_opencode_output: emitting {} events", events.len());
 
     let stream = futures::stream::iter(events.into_iter().map(Ok));
     Ok(Box::pin(stream))
@@ -272,12 +263,10 @@ fn build_warp_events(
                         timestamp: None,
                         server_message_data: String::new(),
                         citations: vec![],
-                        message: Some(api::message::Message::ToolCall(
-                            api::message::ToolCall {
-                                tool_call_id: tool_call_id.clone(),
-                                tool: Some(tool),
-                            },
-                        )),
+                        message: Some(api::message::Message::ToolCall(api::message::ToolCall {
+                            tool_call_id: tool_call_id.clone(),
+                            tool: Some(tool),
+                        })),
                     },
                     run_id,
                 ));
@@ -382,8 +371,8 @@ fn map_to_proto_tool(tool_name: &str, args: &serde_json::Value) -> api::message:
             file_path,
             old_string,
             new_string,
-        } => api::message::tool_call::Tool::ApplyFileDiffs(
-            api::message::tool_call::ApplyFileDiffs {
+        } => {
+            api::message::tool_call::Tool::ApplyFileDiffs(api::message::tool_call::ApplyFileDiffs {
                 summary: String::new(),
                 diffs: vec![api::message::tool_call::apply_file_diffs::FileDiff {
                     file_path,
@@ -393,37 +382,33 @@ fn map_to_proto_tool(tool_name: &str, args: &serde_json::Value) -> api::message:
                 new_files: vec![],
                 deleted_files: vec![],
                 v4a_updates: vec![],
-            },
-        ),
+            })
+        }
         MappedAction::WriteFile { file_path, content } => {
-            api::message::tool_call::Tool::ApplyFileDiffs(
-                api::message::tool_call::ApplyFileDiffs {
-                    summary: String::new(),
-                    diffs: vec![],
-                    new_files: vec![api::message::tool_call::apply_file_diffs::NewFile {
-                        file_path,
-                        content,
-                    }],
-                    deleted_files: vec![],
-                    v4a_updates: vec![],
-                },
-            )
+            api::message::tool_call::Tool::ApplyFileDiffs(api::message::tool_call::ApplyFileDiffs {
+                summary: String::new(),
+                diffs: vec![],
+                new_files: vec![api::message::tool_call::apply_file_diffs::NewFile {
+                    file_path,
+                    content,
+                }],
+                deleted_files: vec![],
+                v4a_updates: vec![],
+            })
         }
         MappedAction::ApplyPatch { patch_text } => {
             // Treat patch as a new file diff with the patch text as content.
-            api::message::tool_call::Tool::ApplyFileDiffs(
-                api::message::tool_call::ApplyFileDiffs {
-                    summary: String::new(),
-                    diffs: vec![api::message::tool_call::apply_file_diffs::FileDiff {
-                        file_path: String::new(),
-                        search: String::new(),
-                        replace: patch_text,
-                    }],
-                    new_files: vec![],
-                    deleted_files: vec![],
-                    v4a_updates: vec![],
-                },
-            )
+            api::message::tool_call::Tool::ApplyFileDiffs(api::message::tool_call::ApplyFileDiffs {
+                summary: String::new(),
+                diffs: vec![api::message::tool_call::apply_file_diffs::FileDiff {
+                    file_path: String::new(),
+                    search: String::new(),
+                    replace: patch_text,
+                }],
+                new_files: vec![],
+                deleted_files: vec![],
+                v4a_updates: vec![],
+            })
         }
         MappedAction::Grep { pattern, path, .. } => {
             api::message::tool_call::Tool::Grep(api::message::tool_call::Grep {
@@ -489,9 +474,7 @@ fn extract_user_text(params: &RequestParams) -> String {
                     .unwrap_or_else(|| "Generate project rules for this repository.".to_string()),
             ),
 
-            AIAgentInput::ActionResult { result, .. } => {
-                Some(format!("Action result: {result}"))
-            }
+            AIAgentInput::ActionResult { result, .. } => Some(format!("Action result: {result}")),
 
             AIAgentInput::AutoCodeDiffQuery { query, .. } => Some(query.clone()),
 
@@ -512,10 +495,7 @@ fn extract_user_text(params: &RequestParams) -> String {
             } => {
                 let skill_name = &skill.name;
                 match user_query {
-                    Some(uq) => Some(format!(
-                        "Invoke skill '{skill_name}': {}",
-                        uq.query
-                    )),
+                    Some(uq) => Some(format!("Invoke skill '{skill_name}': {}", uq.query)),
                     None => Some(format!("Invoke skill '{skill_name}'.")),
                 }
             }

@@ -92,15 +92,12 @@ impl ResponseStream {
 
         let request_id = Uuid::new_v4();
         let params_clone = params.clone();
-        let _ =
-            ctx.spawn(
-                async move {
-                    generate_agent_output(server_api, params_clone, cancellation_rx).await
-                },
-                move |me, stream, ctx| {
-                    me.handle_response_stream_result(request_id, stream, ctx);
-                },
-            );
+        let _ = ctx.spawn(
+            async move { generate_agent_output(server_api, params_clone, cancellation_rx).await },
+            move |me, stream, ctx| {
+                me.handle_response_stream_result(request_id, stream, ctx);
+            },
+        );
         Self {
             id: ResponseStreamId(Uuid::new_v4().to_string()),
             params: params.clone(),

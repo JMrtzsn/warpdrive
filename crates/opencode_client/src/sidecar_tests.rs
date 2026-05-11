@@ -33,8 +33,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_sidecar_start_with_missing_binary() {
-        let sidecar =
-            SidecarManager::new("/nonexistent/path/opencode", "/tmp/project");
+        let sidecar = SidecarManager::new("/nonexistent/path/opencode", "/tmp/project");
         let result = sidecar.start().await;
         assert!(result.is_err());
     }

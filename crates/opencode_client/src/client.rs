@@ -57,7 +57,9 @@ impl OpenCodeClient {
             .context("create session request failed")?
             .error_for_status()
             .context("create session returned error status")?;
-        resp.json().await.context("failed to parse session response")
+        resp.json()
+            .await
+            .context("failed to parse session response")
     }
 
     pub async fn get_session(&self, session_id: &str) -> Result<Session> {
@@ -107,11 +109,7 @@ impl OpenCodeClient {
     // ── Messages ────────────────────────────────────────────────────────
 
     /// Send a prompt and return the raw response body as a string (for debugging).
-    pub async fn raw_prompt(
-        &self,
-        session_id: &str,
-        req: &PromptRequest,
-    ) -> Result<String> {
+    pub async fn raw_prompt(&self, session_id: &str, req: &PromptRequest) -> Result<String> {
         let resp = self
             .http
             .post(format!("{}/session/{}/message", self.base_url, session_id))
@@ -121,15 +119,13 @@ impl OpenCodeClient {
             .context("prompt request failed")?
             .error_for_status()
             .context("prompt returned error status")?;
-        resp.text().await.context("failed to read prompt response body")
+        resp.text()
+            .await
+            .context("failed to read prompt response body")
     }
 
     /// Send a prompt and wait for the full response (synchronous mode).
-    pub async fn prompt(
-        &self,
-        session_id: &str,
-        req: &PromptRequest,
-    ) -> Result<MessageResponse> {
+    pub async fn prompt(&self, session_id: &str, req: &PromptRequest) -> Result<MessageResponse> {
         let resp = self
             .http
             .post(format!("{}/session/{}/message", self.base_url, session_id))
@@ -173,11 +169,7 @@ impl OpenCodeClient {
     }
 
     /// Get a specific message.
-    pub async fn get_message(
-        &self,
-        session_id: &str,
-        message_id: &str,
-    ) -> Result<MessageResponse> {
+    pub async fn get_message(&self, session_id: &str, message_id: &str) -> Result<MessageResponse> {
         let resp = self
             .http
             .get(format!(
@@ -188,7 +180,9 @@ impl OpenCodeClient {
             .await
             .context("get message request failed")?
             .error_for_status()?;
-        resp.json().await.context("failed to parse message response")
+        resp.json()
+            .await
+            .context("failed to parse message response")
     }
 
     // ── Permissions ─────────────────────────────────────────────────────

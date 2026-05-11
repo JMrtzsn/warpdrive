@@ -56,9 +56,7 @@ fn count_event_types(events: &[api::ResponseEvent]) -> (usize, usize, usize, usi
                 for a in &ca.actions {
                     match &a.action {
                         Some(api::client_action::Action::CreateTask(_)) => create_task += 1,
-                        Some(api::client_action::Action::AddMessagesToTask(_)) => {
-                            add_messages += 1
-                        }
+                        Some(api::client_action::Action::AddMessagesToTask(_)) => add_messages += 1,
                         _ => {}
                     }
                 }
@@ -99,16 +97,16 @@ fn follow_up_message_skips_create_task() {
 
 #[test]
 fn tool_call_emits_call_and_result() {
-    let response = make_response(vec![tool_call_part(
-        "bash",
-        json!({"command": "ls"}),
-    )]);
+    let response = make_response(vec![tool_call_part("bash", json!({"command": "ls"}))]);
     let events = build_warp_events(&response, true, "run-1", "req-1");
 
     let (init, create_task, add_messages, finished) = count_event_types(&events);
     assert_eq!(init, 1);
     assert_eq!(create_task, 1);
-    assert_eq!(add_messages, 2, "tool-call should emit ToolCall + ToolCallResult");
+    assert_eq!(
+        add_messages, 2,
+        "tool-call should emit ToolCall + ToolCallResult"
+    );
     assert_eq!(finished, 1);
 }
 
@@ -118,7 +116,10 @@ fn empty_text_is_skipped() {
     let events = build_warp_events(&response, true, "run-1", "req-1");
 
     let (_init, _create_task, add_messages, _finished) = count_event_types(&events);
-    assert_eq!(add_messages, 0, "empty text should not emit AddMessagesToTask");
+    assert_eq!(
+        add_messages, 0,
+        "empty text should not emit AddMessagesToTask"
+    );
 }
 
 #[test]
@@ -231,7 +232,10 @@ fn real_response_shape_step_text_step() {
     let (init, create_task, add_messages, finished) = count_event_types(&events);
     assert_eq!(init, 1);
     assert_eq!(create_task, 1);
-    assert_eq!(add_messages, 1, "only the text part should produce a message");
+    assert_eq!(
+        add_messages, 1,
+        "only the text part should produce a message"
+    );
     assert_eq!(finished, 1);
     // Total: Init + CreateTask + AddMessages(text) + Finished = 4
     assert_eq!(events.len(), 4);
@@ -334,9 +338,7 @@ fn make_params(input: Vec<AIAgentInput>) -> RequestParams {
 
 #[test]
 fn extract_user_text_summarize_no_prompt() {
-    let params = make_params(vec![AIAgentInput::SummarizeConversation {
-        prompt: None,
-    }]);
+    let params = make_params(vec![AIAgentInput::SummarizeConversation { prompt: None }]);
     let text = extract_user_text(&params);
     assert!(text.contains("Summarize"), "got: {text}");
 }
@@ -408,7 +410,10 @@ fn extract_user_text_clone_repository() {
         context: vec![].into(),
     }]);
     let text = extract_user_text(&params);
-    assert!(text.contains("https://github.com/example/repo"), "got: {text}");
+    assert!(
+        text.contains("https://github.com/example/repo"),
+        "got: {text}"
+    );
 }
 
 #[test]
