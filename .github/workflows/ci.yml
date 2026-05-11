@@ -40,14 +40,18 @@ jobs:
         include:
           - os: macos-latest
             name: macOS
+            install-protoc: brew install protobuf
           - os: ubuntu-latest
             name: Linux
+            install-protoc: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+      - name: Install protoc
+        run: ${{ matrix.install-protoc }}
       - run: cargo clippy --locked --workspace --exclude command-signatures-v2 --all-targets --tests -- -D warnings
 
   test:
@@ -59,14 +63,18 @@ jobs:
         include:
           - os: macos-latest
             name: macOS
+            install-protoc: brew install protobuf
           - os: ubuntu-latest
             name: Linux
+            install-protoc: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+      - name: Install protoc
+        run: ${{ matrix.install-protoc }}
       - uses: taiki-e/install-action@v2
         with:
           tool: nextest
@@ -84,14 +92,18 @@ jobs:
         include:
           - os: macos-latest
             name: macOS
+            install-protoc: brew install protobuf
           - os: ubuntu-latest
             name: Linux
+            install-protoc: sudo apt-get update && sudo apt-get install -y protobuf-compiler
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: Swatinem/rust-cache@v2
         with:
           save-if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
+      - name: Install protoc
+        run: ${{ matrix.install-protoc }}
       - run: cargo build --locked --workspace --exclude command-signatures-v2
 
   ci-result:
