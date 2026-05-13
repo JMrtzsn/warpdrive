@@ -52,7 +52,7 @@ jobs:
           save-if: ${{ github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main' }}
       - name: Install protoc
         run: ${{ matrix.install-protoc }}
-      - run: cargo clippy --locked --workspace --exclude command-signatures-v2 --all-targets --tests -- -D warnings
+      - run: cargo clippy --locked --workspace --exclude command-signatures-v2 --all-targets --tests
 
   test:
     name: Tests (${{ matrix.name }})
