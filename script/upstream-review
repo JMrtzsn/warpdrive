@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# Show upstream commits worth cherry-picking into warpdrive.
+# Usage: ./script/upstream-review [--all]
+#
+# By default, filters to paths we care about and excludes cloud/billing noise.
+# Use --all to see everything.
+
+set -euo pipefail
+
+MERGE_BASE=$(git merge-base master upstream/master)
+
+# Paths we care about
+PATHS=(
+  crates/terminal
+  crates/shell_integration
+  crates/warpui
+  crates/warpui_core
+  app/src/terminal
+  app/src/input
+  app/src/app
+  app/src/workspace
+  crates/pty
+)
+
+# Exclude patterns (grep -v)
+EXCLUDE="cloud\|environment\|billing\|telemetry\|auth.*FTUX\|orchestrat\|harness\|remote.*codebase\|REV-"
+
+echo "Upstream commits since $(git log --oneline -1 "$MERGE_BASE" | cut -c1-8)..."
+echo "Behind by $(git rev-list --count "$MERGE_BASE"..upstream/master) commits"
+echo "---"
+
+if [[ "${1:-}" == "--all" ]]; then
+  git log --oneline "$MERGE_BASE"..upstream/master
+else
+  git log --oneline "$MERGE_BASE"..upstream/master -- "${PATHS[@]}" | grep -iv "$EXCLUDE" || echo "(none found)"
+fi
