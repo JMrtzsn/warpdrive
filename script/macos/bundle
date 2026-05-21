@@ -255,6 +255,9 @@ elif [[ $RELEASE_CHANNEL = "local" || $RELEASE_CHANNEL = "dev" ]]; then
   else
     CARGO_PROFILE="release-lto-debug_assertions"
   fi
+elif [[ $RELEASE_CHANNEL = "oss" ]]; then
+  # OSS builds use plain release (no LTO) for faster CI builds.
+  CARGO_PROFILE="release"
 else
   if [[ "$ARTIFACT" == "cli" ]]; then
     CARGO_PROFILE="release-cli"
