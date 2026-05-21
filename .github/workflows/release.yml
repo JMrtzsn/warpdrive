@@ -32,8 +32,8 @@ jobs:
       - name: Install protobuf
         run: brew install protobuf
 
-      - name: Install cargo-bundle
-        run: cargo install cargo-bundle
+      - name: Install cargo-bundle and cargo-about
+        run: cargo install cargo-bundle cargo-about
 
       - name: Build .app bundle
         run: ./script/macos/bundle --channel oss --nosign --nouniversal --arch ${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }}
