@@ -29,11 +29,26 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-bundle
+            ~/.cargo/bin/cargo-about
+            target
+          key: ${{ runner.os }}-${{ matrix.arch }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.arch }}-cargo-
+
       - name: Install protobuf
         run: brew install protobuf
 
       - name: Install cargo-bundle and cargo-about
-        run: cargo install cargo-bundle cargo-about
+        run: |
+          which cargo-bundle || cargo install cargo-bundle
+          which cargo-about || cargo install cargo-about
 
       - name: Build .app bundle
         run: ./script/macos/bundle --channel oss --nosign --nouniversal --arch ${{ matrix.arch == 'arm64' && 'aarch64' || 'x86_64' }}
