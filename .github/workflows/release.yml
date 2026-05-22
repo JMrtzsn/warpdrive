@@ -41,8 +41,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ matrix.arch }}-cargo-
 
-      - name: Install protobuf
-        run: brew install protobuf
+      - name: Install system dependencies
+        run: brew install protobuf create-dmg
 
       - name: Install cargo-bundle
         run: which cargo-bundle || cargo install cargo-bundle
