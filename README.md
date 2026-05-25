@@ -16,7 +16,7 @@ Replaces Warp's proprietary AI backend with [OpenCode](https://opencode.ai). You
 git clone git@github.com:JMrtzsn/warpdrive.git
 cd warpdrive
 ./script/bootstrap    # first time only
-cargo run --bin warp-oss
+cargo run --bin warpdrive
 ```
 
 OpenCode starts automatically as a sidecar process on port 14096.

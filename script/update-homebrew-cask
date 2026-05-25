@@ -36,12 +36,12 @@ cask "warpdrive" do
 
   depends_on macos: ">= :mojave"
 
-  app "WarpOss.app", target: "Warpdrive.app"
+  app "Warpdrive.app"
 
   zap trash: [
-    "~/Library/Application Support/dev.warp.WarpOss",
-    "~/Library/Caches/dev.warp.WarpOss",
-    "~/Library/Preferences/dev.warp.WarpOss.plist",
+    "~/Library/Application Support/dev.warpdrive.Warpdrive",
+    "~/Library/Caches/dev.warpdrive.Warpdrive",
+    "~/Library/Preferences/dev.warpdrive.Warpdrive.plist",
   ]
 end
 EOF

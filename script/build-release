@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Build a distributable .app bundle for Warpdrive (unsigned, single arch).
-# Produces: target/release/bundle/osx/WarpOss.app
+# Produces: target/release/bundle/osx/Warpdrive.app
 #
 # Usage:
 #   ./script/build-release              # build for current arch
@@ -28,10 +28,10 @@ fi
 ./script/macos/bundle "${ARGS[@]}"
 
 # Find the built .app
-APP_PATH=$(find target -name "WarpOss.app" -type d 2>/dev/null | head -1)
+APP_PATH=$(find target -name "Warpdrive.app" -type d 2>/dev/null | head -1)
 
 if [[ -z "$APP_PATH" ]]; then
-  echo "ERROR: WarpOss.app not found in target/" >&2
+  echo "ERROR: Warpdrive.app not found in target/" >&2
   exit 1
 fi
 
@@ -40,8 +40,8 @@ echo "==> Built: $APP_PATH"
 # Create a zip for distribution
 ZIP_NAME="Warpdrive-$(uname -m).zip"
 ZIP_DIR=$(dirname "$APP_PATH")
-(cd "$ZIP_DIR" && zip -qry "$WORKSPACE_ROOT/$ZIP_NAME" "WarpOss.app")
+(cd "$ZIP_DIR" && zip -qry "$WORKSPACE_ROOT/$ZIP_NAME" "Warpdrive.app")
 
 echo "==> Packaged: $ZIP_NAME ($(du -h "$ZIP_NAME" | cut -f1))"
 echo ""
-echo "To install: unzip $ZIP_NAME && mv WarpOss.app /Applications/"
+echo "To install: unzip $ZIP_NAME && mv Warpdrive.app /Applications/"
