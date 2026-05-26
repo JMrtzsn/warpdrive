@@ -1,7 +1,10 @@
 #!/bin/bash
 #
-# Update the Homebrew Cask formula with SHA256 hashes from a GitHub release.
-# Usage: ./script/update-homebrew-cask v0.1.0
+# Update the Homebrew Cask formula with SHA256 hash from a GitHub release.
+# Usage: ./script/update-homebrew-cask v0.2.0
+#
+# NOTE: The release must be published (not draft) for download URLs to work.
+# Go to GitHub and publish the draft release first.
 #
 set -euo pipefail
 
@@ -13,28 +16,28 @@ TAP_REPO="JMrtzsn/homebrew-warpdrive"
 echo "==> Fetching SHA256 for release $VERSION"
 
 ARM_URL="https://github.com/$REPO/releases/download/$VERSION/Warpdrive-macos-arm64.zip"
-X86_URL="https://github.com/$REPO/releases/download/$VERSION/Warpdrive-macos-x86_64.zip"
+ARM_SHA=$(curl -sfL "$ARM_URL" | shasum -a 256 | cut -d' ' -f1)
 
-ARM_SHA=$(curl -sL "$ARM_URL" | shasum -a 256 | cut -d' ' -f1)
-X86_SHA=$(curl -sL "$X86_URL" | shasum -a 256 | cut -d' ' -f1)
+if [[ -z "$ARM_SHA" || "$ARM_SHA" == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" ]]; then
+  echo "ERROR: Could not download release asset. Is the release published (not draft)?" >&2
+  echo "  URL: $ARM_URL" >&2
+  exit 1
+fi
 
-echo "  arm64:  $ARM_SHA"
-echo "  x86_64: $X86_SHA"
+echo "  arm64: $ARM_SHA"
 
 CASK_CONTENT=$(cat <<EOF
 cask "warpdrive" do
-  arch arm: "arm64", intel: "x86_64"
-
   version "$VERSION_NUM"
-  sha256 arm:   "$ARM_SHA",
-         intel: "$X86_SHA"
+  sha256 "$ARM_SHA"
 
-  url "https://github.com/$REPO/releases/download/v#{version}/Warpdrive-macos-#{arch}.zip"
+  url "https://github.com/$REPO/releases/download/v#{version}/Warpdrive-macos-arm64.zip"
   name "Warpdrive"
   desc "Warp terminal with local AI via OpenCode - no account, no cloud"
   homepage "https://github.com/$REPO"
 
   depends_on macos: ">= :mojave"
+  depends_on arch: :arm64
 
   app "Warpdrive.app"
 
