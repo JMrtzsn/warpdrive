@@ -36,7 +36,7 @@ cask "warpdrive" do
   desc "Warp terminal with local AI via OpenCode - no account, no cloud"
   homepage "https://github.com/$REPO"
 
-  depends_on macos: ">= :mojave"
+  depends_on macos: ">= :ventura"
   depends_on arch: :arm64
 
   app "Warpdrive.app"
