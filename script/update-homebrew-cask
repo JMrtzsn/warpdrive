@@ -41,6 +41,12 @@ cask "warpdrive" do
 
   app "Warpdrive.app"
 
+  postflight do
+    system_command "/usr/bin/xattr",
+                   args: ["-cr", "#{appdir}/Warpdrive.app"],
+                   sudo: false
+  end
+
   zap trash: [
     "~/Library/Application Support/dev.warpdrive.Warpdrive",
     "~/Library/Caches/dev.warpdrive.Warpdrive",

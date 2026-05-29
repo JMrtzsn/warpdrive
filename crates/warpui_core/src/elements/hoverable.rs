@@ -662,8 +662,7 @@ impl Element for Hoverable {
                     handler(ctx, app, *position);
                     ctx.notify();
                     return true;
-                } else if let (Some(_), Some(handler)) =
-                    (click_count, self.click_handler.as_mut())
+                } else if let (Some(_), Some(handler)) = (click_count, self.click_handler.as_mut())
                 {
                     handler(ctx, app, *position);
                     ctx.notify();

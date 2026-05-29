@@ -319,7 +319,12 @@ impl Element for EventHandler {
                 return true;
             }
             Some(Event::ForwardMouseDown { position, .. })
-                if self.dispatch_callback(self.forward_mouse_down.as_ref(), ctx, *position, app) =>
+                if self.dispatch_callback(
+                    self.forward_mouse_down.as_ref(),
+                    ctx,
+                    *position,
+                    app,
+                ) =>
             {
                 return true;
             }

@@ -174,7 +174,10 @@ impl Drop for SidecarManager {
 /// Find the opencode binary in PATH or common locations.
 pub fn find_opencode_binary() -> Option<PathBuf> {
     // Check PATH first.
-    if let Ok(output) = command::blocking::Command::new("which").arg("opencode").output() {
+    if let Ok(output) = command::blocking::Command::new("which")
+        .arg("opencode")
+        .output()
+    {
         if output.status.success() {
             let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !path.is_empty() {
