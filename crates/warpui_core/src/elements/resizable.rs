@@ -425,42 +425,37 @@ impl Element for Resizable {
         let child_handled = self.child.dispatch_event(event, ctx, app);
 
         match event.raw_event() {
-            crate::Event::LeftMouseDown { position, .. } => {
-                // If a mouse-down on the dragbar element occurred, put the view into resizing mode
+            crate::Event::LeftMouseDown { position, .. }
                 if self
                     .dragbar
                     .bounds
-                    .is_some_and(|bounds| bounds.contains_point(*position))
-                {
-                    self.state().begin_resizing(*position);
-                    dispatch_callback(self.resize_handler.as_mut(), ctx, app);
-                    return true;
-                }
+                    .is_some_and(|bounds| bounds.contains_point(*position)) =>
+            {
+                // If a mouse-down on the dragbar element occurred, put the view into resizing mode
+                self.state().begin_resizing(*position);
+                dispatch_callback(self.resize_handler.as_mut(), ctx, app);
+                return true;
             }
 
-            crate::Event::LeftMouseUp { .. } => {
+            crate::Event::LeftMouseUp { .. } if self.state().is_resizing() => {
                 // If a mouse-up occurs, take the view out of resizing mode
-                if self.state().is_resizing() {
-                    ctx.reset_cursor();
-                    self.state().end_resizing();
-                    dispatch_callback(self.end_resize_handler.as_mut(), ctx, app);
-                    return true;
-                }
+                ctx.reset_cursor();
+                self.state().end_resizing();
+                dispatch_callback(self.end_resize_handler.as_mut(), ctx, app);
+                return true;
             }
 
-            crate::Event::LeftMouseDragged { position, .. } => {
-                if self.state().is_resizing() {
-                    let dragbar_side = self.dragbar.side;
-                    let origin = self.origin.map(|origin| origin + self.origin_delta);
-                    let resized = self
-                        .state()
-                        .check_for_resize(*position, origin, dragbar_side);
-                    self.origin_delta += resized.unwrap_or_default();
-                    if resized.is_some() {
-                        dispatch_callback(self.resize_handler.as_mut(), ctx, app)
-                    }
-                    return true;
+            crate::Event::LeftMouseDragged { position, .. } if self.state().is_resizing() => {
+                let dragbar_side = self.dragbar.side;
+                let origin = self.origin.map(|origin| origin + self.origin_delta);
+                let resized = self
+                    .state()
+                    .check_for_resize(*position, origin, dragbar_side);
+                self.origin_delta += resized.unwrap_or_default();
+                if resized.is_some() {
+                    dispatch_callback(self.resize_handler.as_mut(), ctx, app)
                 }
+                return true;
             }
             crate::Event::MouseMoved { position, .. } => {
                 // A mouse event over the dragbar should set the cursor
