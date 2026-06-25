@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-macos:
+    name: Build macOS (arm64)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-bundle
+            target
+          key: macos-arm64-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            macos-arm64-cargo-
+
+      - name: Install system dependencies
+        run: brew install protobuf create-dmg
+
+      - name: Install cargo-bundle
+        run: which cargo-bundle || cargo install cargo-bundle
+
+      - name: Build .app bundle
+        env:
+          NO_LICENSES: "1"
+        run: ./script/macos/bundle --channel oss --nosign --nouniversal --arch aarch64
+
+      - name: Package .app as zip
+        run: |
+          APP_PATH=$(find target -name "Warpdrive.app" -type d | head -1)
+          cd "$(dirname "$APP_PATH")"
+          zip -qry "$GITHUB_WORKSPACE/Warpdrive-macos-arm64.zip" "Warpdrive.app"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: warpdrive-macos-arm64
+          path: Warpdrive-macos-arm64.zip
+
+  release:
+    name: Create GitHub Release
+    needs: build-macos
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          generate_release_notes: true
+          files: |
+            artifacts/warpdrive-macos-arm64/Warpdrive-macos-arm64.zip

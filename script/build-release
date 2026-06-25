@@ -1,0 +1,47 @@
+#!/bin/bash
+#
+# Build a distributable .app bundle for Warpdrive (unsigned, single arch).
+# Produces: target/release/bundle/osx/Warpdrive.app
+#
+# Usage:
+#   ./script/build-release              # build for current arch
+#   ./script/build-release --universal  # build universal binary (slow)
+#
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$WORKSPACE_ROOT"
+
+UNIVERSAL=false
+if [[ "${1:-}" == "--universal" ]]; then
+  UNIVERSAL=true
+fi
+
+echo "==> Building Warpdrive .app bundle"
+
+ARGS=(--channel oss --nosign)
+if [[ "$UNIVERSAL" == false ]]; then
+  ARGS+=(--nouniversal)
+fi
+
+./script/macos/bundle "${ARGS[@]}"
+
+# Find the built .app
+APP_PATH=$(find target -name "Warpdrive.app" -type d 2>/dev/null | head -1)
+
+if [[ -z "$APP_PATH" ]]; then
+  echo "ERROR: Warpdrive.app not found in target/" >&2
+  exit 1
+fi
+
+echo "==> Built: $APP_PATH"
+
+# Create a zip for distribution
+ZIP_NAME="Warpdrive-$(uname -m).zip"
+ZIP_DIR=$(dirname "$APP_PATH")
+(cd "$ZIP_DIR" && zip -qry "$WORKSPACE_ROOT/$ZIP_NAME" "Warpdrive.app")
+
+echo "==> Packaged: $ZIP_NAME ($(du -h "$ZIP_NAME" | cut -f1))"
+echo ""
+echo "To install: unzip $ZIP_NAME && mv Warpdrive.app /Applications/"

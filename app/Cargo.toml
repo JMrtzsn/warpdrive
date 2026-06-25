@@ -1,11 +1,11 @@
 [package]
 authors = ["Warp Team <dev@warp.dev>"]
-default-run = "warp-oss"
+default-run = "warpdrive"
 description = "The cloud-backed terminal for individuals and teams"
 edition = "2021"
 autobins = false
 name = "warp"
-version = "0.1.0"
+version = "0.3.0"
 publish.workspace = true
 license.workspace = true
 
@@ -18,7 +18,7 @@ path = "src/lib.rs"
 # flag overrides). Otherwise these binaries are exactly identical to our main binary.
 
 [[bin]]
-name = "warp-oss"
+name = "warpdrive"
 path = "src/bin/oss.rs"
 test = false
 
@@ -1004,14 +1004,14 @@ cloud_mode_input_v2 = ["cloud_mode"]
 handoff_cloud_cloud = ["cloud_mode_setup_v2"]
 git_credential_refresh = []
 
-[package.metadata.bundle.bin.warp-oss]
+[package.metadata.bundle.bin.warpdrive]
 category = "public.app-category.developer-tools"
-copyright = "© 2025, Denver Technologies, Inc"
-identifier = "dev.warp.WarpOss"
-name = "WarpOss"
+copyright = "© 2025, Warpdrive Contributors"
+identifier = "dev.warpdrive.Warpdrive"
+name = "Warpdrive"
 resources = ["assets/onboarding"]
 icon = ["channels/oss/icon/no-padding/512x512.png", "channels/oss/icon/no-padding/icon.ico"]
-short_description = "The open-source, cloud-backed terminal for individuals and teams."
+short_description = "Warp terminal, de-clouded."
 
 [package.metadata.bundle.bin.stable]
 category = "public.app-category.developer-tools"
