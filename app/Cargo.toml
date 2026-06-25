@@ -490,6 +490,10 @@ creating_shared_sessions = []
 cross_repo_context = []
 codebase_index_persistence = ["full_source_code_embedding"]
 default = [
+    # De-cloud kill switch: fails all authenticated requests at the auth
+    # chokepoint (warp_server_client AuthSession::get_or_refresh_access_token),
+    # so the build cannot phone home regardless of credentials or config.
+    "skip_login",
     "agent_mode",
     "viewing_shared_sessions",
     "render_continuous_block_selections_with_single_border",
