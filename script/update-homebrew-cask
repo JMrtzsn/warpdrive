@@ -36,7 +36,7 @@ cask "warpdrive" do
   desc "Warp terminal, de-clouded - no account, no telemetry, no phone-home"
   homepage "https://github.com/$REPO"
 
-  depends_on macos: ">= :ventura"
+  depends_on macos: :ventura
   depends_on arch: :arm64
 
   app "Warpdrive.app"
