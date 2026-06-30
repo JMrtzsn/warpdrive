@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+#
+# Sync warpdotdev/warp (upstream) into the current branch.
+#
+# This does the mechanical git work only. It never pushes and never resets your
+# branch destructively. On conflicts it stops and prints exactly what needs
+# resolving, so a human or AI agent can finish the job (see
+# .agents/skills/sync-upstream/SKILL.md).
+#
+# Usage:
+#   ./script/sync-upstream            # fetch + create sync branch + attempt merge
+#   ./script/sync-upstream --status   # just report how far behind upstream we are
+#
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$REPO_ROOT"
+
+UPSTREAM_URL="https://github.com/warpdotdev/warp.git"
+UPSTREAM_BRANCH="master"
+
+info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
+warn()  { printf '\033[1;33mwarning:\033[0m %s\n' "$*"; }
+err()   { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; }
+
+ensure_upstream_remote() {
+  if ! git remote get-url upstream >/dev/null 2>&1; then
+    info "Adding 'upstream' remote -> $UPSTREAM_URL"
+    git remote add upstream "$UPSTREAM_URL"
+  fi
+  info "Fetching upstream/$UPSTREAM_BRANCH"
+  git fetch --quiet upstream "$UPSTREAM_BRANCH"
+}
+
+report_status() {
+  # Human-readable status goes to stderr; the bare "behind" count goes to
+  # stdout so callers can capture it without swallowing the message.
+  local behind ahead
+  behind="$(git rev-list --count HEAD..upstream/$UPSTREAM_BRANCH)"
+  ahead="$(git rev-list --count upstream/$UPSTREAM_BRANCH..HEAD)"
+  info "Upstream tip: $(git rev-parse --short upstream/$UPSTREAM_BRANCH)" >&2
+  info "This branch is $behind commit(s) behind and $ahead commit(s) ahead of upstream." >&2
+  echo "$behind"
+}
+
+# --- main ---------------------------------------------------------------
+
+if [[ "${1:-}" == "--status" ]]; then
+  ensure_upstream_remote
+  report_status >/dev/null   # message prints via stderr; count discarded
+  exit 0
+fi
+
+# Refuse to run on a dirty tree; a merge needs a clean starting point.
+if ! git diff --quiet || ! git diff --cached --quiet; then
+  err "Working tree is dirty. Commit or stash your changes first."
+  exit 1
+fi
+
+BASE_BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+ensure_upstream_remote
+BEHIND="$(report_status)"
+
+if [[ "$BEHIND" -eq 0 ]]; then
+  info "Already up to date with upstream. Nothing to do."
+  exit 0
+fi
+
+SYNC_BRANCH="sync/upstream-$(date +%Y-%m-%d)"
+if git show-ref --verify --quiet "refs/heads/$SYNC_BRANCH"; then
+  warn "Branch $SYNC_BRANCH already exists; reusing a unique suffix."
+  SYNC_BRANCH="${SYNC_BRANCH}-$(date +%H%M%S)"
+fi
+
+info "Creating sync branch '$SYNC_BRANCH' from '$BASE_BRANCH'"
+git checkout -b "$SYNC_BRANCH"
+
+info "Merging upstream/$UPSTREAM_BRANCH ..."
+if git merge --no-edit upstream/"$UPSTREAM_BRANCH"; then
+  echo
+  info "CLEAN MERGE. No conflicts."
+  info "Next steps:"
+  echo "  1. Verify the build:  cargo check -p warp --bin warpdrive"
+  echo "  2. Confirm kill switch survived:  grep -n '\"skip_login\",' app/Cargo.toml"
+  echo "  3. If good, merge back:  git checkout $BASE_BRANCH && git merge --ff-only $SYNC_BRANCH"
+  echo "  4. Push:  git push origin $BASE_BRANCH"
+  exit 0
+fi
+
+# Conflicted. Surface everything an agent needs, then stop.
+echo
+err "MERGE CONFLICTS. Stopping for manual/AI resolution."
+echo
+info "Conflicted files:"
+git diff --name-only --diff-filter=U | sed 's/^/  /'
+echo
+info "Fork resolution policy (see .agents/skills/sync-upstream/SKILL.md):"
+echo "  - app/Cargo.toml         : KEEP our changes (skip_login in default, warpdrive bin/bundle)."
+echo "  - script/macos/bundle    : KEEP our warpdrive identity (WARP_BIN, BUNDLE_ID, app name)."
+echo "  - README.md / docs       : KEEP ours (de-clouded framing)."
+echo "  - .github/workflows/**   : KEEP ours (we manage CI/release ourselves)."
+echo "  - terminal / editor / UI : TAKE upstream's version, then verify it compiles."
+echo
+info "The merge is in progress. After resolving each file:"
+echo "  git add <file>      # for each resolved file"
+echo "  git commit --no-edit"
+echo "  cargo check -p warp --bin warpdrive"
+echo
+warn "To abort and discard this attempt:  git merge --abort && git checkout $BASE_BRANCH && git branch -D $SYNC_BRANCH"
+exit 2
