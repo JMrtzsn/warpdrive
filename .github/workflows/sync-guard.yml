@@ -1,0 +1,85 @@
+name: Sync Guard
+
+# Gate for automated upstream-sync branches. Triggered by a push to an
+# `auto-sync/*` branch (created by upstream-sync.yml). Verifies that the merged
+# result still compiles and that the de-cloud kill switch (`skip_login` in the
+# app's default features) survived the merge. On success it opens a PR and
+# merges it into master. On failure it opens a PR and leaves it for review.
+#
+# Triggering on `push` (rather than the PR being opened by a GITHUB_TOKEN
+# action) is deliberate: it sidesteps GitHub's rule that GITHUB_TOKEN-created
+# events do not trigger further workflows.
+
+on:
+  push:
+    branches:
+      - "auto-sync/**"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  guard:
+    name: Verify build and kill switch
+    runs-on: macos-14
+    timeout-minutes: 90
+    steps:
+      - name: Checkout sync branch
+        uses: actions/checkout@v4
+
+      - name: Assert skip_login is still a default feature
+        run: |
+          if ! grep -Eq '^\s*"skip_login",' app/Cargo.toml; then
+            echo "::error::skip_login is no longer in the app default feature set. The merge dropped the de-cloud kill switch. Refusing to auto-merge."
+            exit 1
+          fi
+          echo "skip_login default feature present."
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: sync-guard-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            sync-guard-
+
+      - name: Install protobuf
+        run: brew install protobuf
+
+      - name: Build warpdrive binary
+        id: build
+        run: cargo check -p warp --bin warpdrive
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Open PR for this sync branch
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Reuse an existing PR for this branch if one is already open.
+          NUMBER="$(gh pr list --head "${GITHUB_REF_NAME}" --json number --jq '.[0].number')"
+          if [ -z "${NUMBER}" ]; then
+            NUMBER="$(gh pr create \
+              --base master \
+              --head "${GITHUB_REF_NAME}" \
+              --title "Sync upstream/master (${GITHUB_REF_NAME})" \
+              --body "Automated upstream sync. Built warpdrive and verified the \`skip_login\` kill switch. Merging." \
+              --label "auto-sync" \
+              | tail -1 | grep -oE '[0-9]+$')"
+          fi
+          echo "number=${NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Merge the sync PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge "${{ steps.pr.outputs.number }}" --merge --delete-branch
