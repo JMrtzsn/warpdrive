@@ -1,15 +1,23 @@
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
+use chrono::Local;
 use uuid::Uuid;
+use warp_multi_agent_api::response_event;
 use warpui::{App, SingletonEntity};
 
+use crate::ai::agent::conversation::AIConversationId;
 use crate::ai::agent::task::TaskId;
 use crate::ai::agent::{
-    AIAgentAttachment, AIAgentContext, AIAgentInput, ImageContext, PassiveSuggestionTrigger,
-    UserQueryMode,
+    AIAgentAttachment, AIAgentContext, AIAgentInput, CancellationReason, ImageContext,
+    PassiveSuggestionTrigger, UserQueryMode,
 };
 use crate::ai::ambient_agents::AmbientAgentTaskId;
-use crate::ai::blocklist::{BlocklistAIHistoryModel, PendingAttachment, PendingFile};
+use crate::ai::blocklist::{
+    BlocklistAIHistoryEvent, BlocklistAIHistoryModel, PendingAttachment, PendingFile, RequestInput,
+    ResponseStream, ResponseStreamId,
+};
+use crate::ai::llms::LLMId;
 use crate::test_util::terminal::{add_window_with_terminal, initialize_app_for_terminal_view};
 
 fn new_ambient_agent_task_id() -> AmbientAgentTaskId {
@@ -170,5 +178,151 @@ fn input_for_query_converts_prompt_attachments_and_ignores_live_staging() {
             assert!(referenced_attachments.contains_key("notes.txt (1)"));
             assert!(!referenced_attachments.contains_key("live.txt"));
         });
+    });
+}
+
+#[test]
+fn cancelling_conversation_aborts_pending_auto_resume() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = add_window_with_terminal(&mut app, None);
+
+        // An ID with no backing conversation: if the scheduled wait ever
+        // completes, the resume is a harmless no-op.
+        let conversation_id = AIConversationId::new();
+
+        terminal.update(&mut app, |terminal, ctx| {
+            terminal.ai_controller().update(ctx, |controller, ctx| {
+                controller.schedule_auto_resume_after_error(conversation_id, ctx);
+                assert!(controller
+                    .pending_auto_resume_handles
+                    .contains_key(&conversation_id));
+
+                controller.cancel_conversation_progress(
+                    conversation_id,
+                    CancellationReason::ManuallyCancelled,
+                    ctx,
+                );
+                assert!(!controller
+                    .pending_auto_resume_handles
+                    .contains_key(&conversation_id));
+            });
+        });
+    });
+}
+
+#[test]
+fn mock_response_stream_updates_history_through_controller() {
+    App::test((), |mut app| async move {
+        initialize_app_for_terminal_view(&mut app);
+        let terminal = add_window_with_terminal(&mut app, None);
+        let captured_events = Arc::new(Mutex::new(Vec::new()));
+        let events_for_subscription = Arc::clone(&captured_events);
+        app.update(|ctx| {
+            ctx.subscribe_to_model(&BlocklistAIHistoryModel::handle(ctx), move |_, event, _| {
+                events_for_subscription.lock().unwrap().push(event.clone())
+            });
+        });
+
+        let (conversation_id, stream) = terminal.update(&mut app, |view, ctx| {
+            let terminal_surface_id = view.id();
+            let stream_id = ResponseStreamId::new_for_test();
+            let conversation_id =
+                BlocklistAIHistoryModel::handle(ctx).update(ctx, |history, ctx| {
+                    let conversation_id = history.start_new_conversation(
+                        terminal_surface_id,
+                        false,
+                        false,
+                        false,
+                        ctx,
+                    );
+                    let task_id = history
+                        .conversation(&conversation_id)
+                        .unwrap()
+                        .get_root_task_id()
+                        .clone();
+                    history
+                        .update_conversation_for_new_request_input(
+                            RequestInput {
+                                conversation_id,
+                                input_messages: HashMap::from([(task_id, vec![])]),
+                                working_directory: None,
+                                model_id: LLMId::from("test-model"),
+                                coding_model_id: LLMId::from("test-coding-model"),
+                                cli_agent_model_id: LLMId::from("test-cli-agent-model"),
+                                computer_use_model_id: LLMId::from("test-computer-use-model"),
+                                shared_session_response_initiator: None,
+                                request_start_ts: Local::now(),
+                                supported_tools_override: None,
+                            },
+                            stream_id.clone(),
+                            terminal_surface_id,
+                            ctx,
+                        )
+                        .unwrap();
+                    conversation_id
+                });
+            let stream = ctx.add_model(|_| ResponseStream::new_for_test(stream_id.clone()));
+            view.ai_controller().update(ctx, |controller, ctx| {
+                controller.register_mock_stream_for_test(
+                    stream_id,
+                    conversation_id,
+                    stream.clone(),
+                    ctx,
+                );
+            });
+            (conversation_id, stream)
+        });
+
+        stream.update(&mut app, |stream, ctx| {
+            stream.emit_response_event_for_test(
+                warp_multi_agent_api::ResponseEvent {
+                    r#type: Some(response_event::Type::Init(response_event::StreamInit {
+                        request_id: "test-request".to_string(),
+                        conversation_id: "test-server-conversation".to_string(),
+                        run_id: String::new(),
+                    })),
+                },
+                ctx,
+            );
+            stream.emit_response_event_for_test(
+                warp_multi_agent_api::ResponseEvent {
+                    r#type: Some(response_event::Type::Finished(
+                        response_event::StreamFinished {
+                            reason: Some(response_event::stream_finished::Reason::Done(
+                                response_event::stream_finished::Done {},
+                            )),
+                            conversation_usage_metadata: None,
+                            token_usage: vec![],
+                            should_refresh_model_config: false,
+                            request_cost: None,
+                        },
+                    )),
+                },
+                ctx,
+            );
+        });
+
+        BlocklistAIHistoryModel::handle(&app).read(&app, |history, _| {
+            assert_eq!(
+                history.conversation(&conversation_id).map(|c| c.status()),
+                Some(&crate::ai::agent::conversation::ConversationStatus::Success)
+            );
+        });
+        let events = captured_events.lock().unwrap();
+        assert!(events.iter().any(|event| matches!(
+            event,
+            BlocklistAIHistoryEvent::ConversationServerTokenAssigned {
+                conversation_id: id,
+                ..
+            } if *id == conversation_id
+        )));
+        assert!(events.iter().any(|event| matches!(
+            event,
+            BlocklistAIHistoryEvent::UpdatedStreamingExchange {
+                conversation_id: id,
+                ..
+            } if *id == conversation_id
+        )));
     });
 }

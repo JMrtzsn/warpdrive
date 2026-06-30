@@ -435,14 +435,15 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # executed within this block instead of the actual last
         # command that was run.
         local exit_code=$?
+        local next_block_id="precmd-$WARP_SESSION_ID-$((block_id++))"
         if [ "$WARP_IN_MSYS2" = true ]; then
           warp_send_hook_via_kv_pairs_start "CommandFinished"
           warp_send_hook_kv_pair "exit_code" "$exit_code"
-          warp_send_hook_kv_pair "next_block_id" "precmd-$WARP_SESSION_ID-$((block_id++))"
+          warp_send_hook_kv_pair "next_block_id" "$next_block_id"
           warp_send_hook_kv_pair "session_id" "$WARP_SESSION_ID"
           warp_send_hook_via_kv_pairs_end
         else
-          warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"precmd-$WARP_SESSION_ID-$((block_id++))\", \"session_id\": $WARP_SESSION_ID}}"
+          warp_send_json_message "{\"hook\": \"CommandFinished\", \"value\": {\"exit_code\": $exit_code, \"next_block_id\": \"$next_block_id\", \"session_id\": $WARP_SESSION_ID}}"
         fi
 
         warp_maybe_send_reset_grid_osc
@@ -465,6 +466,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
 
             unset _WARP_GENERATOR_COMMAND
             warp_send_json_message "{\"hook\": \"Precmd\", \"value\": {
+            \"exit_code\": $exit_code,
+            \"next_block_id\": \"$next_block_id\",
             \"pwd\": \"\",
             \"ps1\": \"\",
             \"git_head\": \"\",
@@ -670,6 +673,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
         # We send the escaped PS1, if we are in active Warp prompt mode, for prompt preview rendering (note the shell's PS1 is unset in this case).
         if [ "$WARP_IN_MSYS2" = true ]; then
           warp_send_hook_via_kv_pairs_start "Precmd"
+          warp_send_hook_kv_pair "exit_code" "$exit_code"
+          warp_send_hook_kv_pair "next_block_id" "$next_block_id"
           warp_send_hook_kv_pair "pwd" "$PWD"
           warp_send_hook_kv_pair_escaped "ps1" "$deref_ps1"
           warp_send_hook_kv_pair "ps1_is_encoded" "false"
@@ -683,6 +688,8 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
           warp_send_hook_via_kv_pairs_end
         else
           local escaped_json="{\"hook\": \"Precmd\", \"value\": {
+          \"exit_code\": $exit_code,
+          \"next_block_id\": \"$next_block_id\",
           \"pwd\": \"$escaped_pwd\",
           \"ps1\": \"$escaped_ps1\",
           \"honor_ps1\": $honor_ps1,
@@ -1008,6 +1015,40 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
             # and use printf to convert back to plaintext
             local zsh_env_script=$(printf '%s' 'unsetopt ZLE; unset RCS; unset GLOBAL_RCS; WARP_SESSION_ID='$remote_session_id'; WARP_USING_WINDOWS_CON_PTY=@@USING_CON_PTY_BOOLEAN@@; WARP_HONOR_PS1='$WARP_HONOR_PS1'; _hostname=$(command -pv hostname >/dev/null 2>&1 && command -p hostname 2>/dev/null || command -p uname -n); _user=$(command -pv whoami >/dev/null 2>&1 && command -p whoami 2>/dev/null || echo $USER); _msg=$(printf "{\"hook\": \"InitShell\", \"value\": {\"session_id\": $WARP_SESSION_ID, \"shell\": \"zsh\", \"user\": \"%s\", \"hostname\": \"%s\"}}" "$_user" "$_hostname" | command -p od -An -v -tx1 | command -p tr -d '"'"' \n'"'"'); printf '"'"'\e]9278;d;%s\x07'"'"' $_msg; unset _hostname _user _msg' | command -p od -An -v -tx1 | command -p tr -d ' \n')
 
+            # Optionally attach to an existing ControlMaster the user already
+            # runs for this destination instead of creating our own. Resolve
+            # the user's configured ControlPath with `ssh -G` (which expands
+            # tokens like %h/%p/%r/%C into a literal path), then verify the
+            # master is alive with `ssh -O check`. Both probes are local-only
+            # commands. On any failure we fall back to creating a Warp-owned
+            # master, preserving the existing behavior.
+            local control_path="$SSH_SOCKET_DIR/$WARP_SESSION_ID"
+            local control_master_mode="yes"
+            local external_control_master="false"
+            if [[ "$WARP_SSH_REUSE_CONTROL_MASTER" == "1" ]]; then
+                local user_control_path=$(command ssh -G "${@:1}" 2>/dev/null | command -p sed -n 's/^controlpath //p')
+                case "$user_control_path" in
+                    "" | none)
+                        # No ControlPath configured for this destination.
+                        ;;
+                    *[![:alnum:]._/~@:+,-]*)
+                        # The resolved path contains characters we cannot safely
+                        # embed in the SSH hook JSON below (e.g. an unexpanded %
+                        # token, quotes, or whitespace); fall back to a
+                        # Warp-owned master.
+                        ;;
+                    *)
+                        if command ssh -O check -o ControlPath="$user_control_path" "${@:1}" >/dev/null 2>&1; then
+                            # A live master exists: multiplex through it and let
+                            # the client know Warp does not own it.
+                            control_path="$user_control_path"
+                            control_master_mode="no"
+                            external_control_master="true"
+                        fi
+                        ;;
+                esac
+            fi
+
             # Keep remote commands up-to-date with shell.rs & bash.sh.
             # Note that in this command, we're passing a string to the remote shell. Any variable expansions need to be
             # escaped with "''" to avoid the local shell from expanding them before they're passed to the remote shell.
@@ -1015,7 +1056,7 @@ if [ -z "$WARP_BOOTSTRAPPED" ]; then
             # determine what shell is the login shell on the remote machine.  We perform a preliminary check to see if
             # the remote shell is the Bourne shell to avoid asking it to parse later lines that use syntax it doesn't
             # support.
-            command ssh -o ControlMaster=yes -o ControlPath=$SSH_SOCKET_DIR/$WARP_SESSION_ID \
+            command ssh -o ControlMaster=$control_master_mode -o ControlPath="$control_path" \
             -t "${@:1}" \
 "
 export TERM_PROGRAM='WarpTerminal'
@@ -1027,7 +1068,7 @@ test -n '$WARP_CLIENT_VERSION' && export WARP_CLIENT_VERSION='$WARP_CLIENT_VERSI
 # Only forward the protocol version if it was set locally (i.e. the HOANotifications feature flag is on).
 test -n '$WARP_CLI_AGENT_PROTOCOL_VERSION' && export WARP_CLI_AGENT_PROTOCOL_VERSION='$WARP_CLI_AGENT_PROTOCOL_VERSION'
 
-hook="'$(printf "{\"hook\": \"SSH\", \"value\": {\"socket_path\": \"'$SSH_SOCKET_DIR/$WARP_SESSION_ID'\", \"remote_shell\": \"%s\", \"session_id\": '"$WARP_SESSION_ID"', \"remote_session_id\": '"$remote_session_id"'}}" "${SHELL##*/}" | command -p od -An -v -tx1 | command -p tr -d " \n")'"
+hook="'$(printf "{\"hook\": \"SSH\", \"value\": {\"socket_path\": \"'$control_path'\", \"remote_shell\": \"%s\", \"session_id\": '"$WARP_SESSION_ID"', \"remote_session_id\": '"$remote_session_id"', \"external_control_master\": '"$external_control_master"'}}" "${SHELL##*/}" | command -p od -An -v -tx1 | command -p tr -d " \n")'"
 printf '$OSC_START$DCS_JSON_MARKER$OSC_PARAM_SEPARATOR%s$OSC_END' "'$hook'"
 
 if test "'"${SHELL##*/}" != "bash" -a "${SHELL##*/}" != "zsh"'"; then
