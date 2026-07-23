@@ -51,7 +51,7 @@ fork-specific files win; everything else takes upstream.**
 | `app/Cargo.toml` | KEEP OURS for the fork-specific bits: `"skip_login",` must remain in `default`; `default-run`, the `[[bin]]` name, and `[package.metadata.bundle.bin.warpdrive]` must stay `warpdrive`. For unrelated dependency/feature changes upstream made elsewhere in the file, TAKE upstream's. This usually means a hand-merge, not "ours" wholesale. |
 | `script/macos/bundle` | KEEP OURS in the `oss` channel branch (`WARP_BIN="warpdrive"`, `BUNDLE_ID="dev.warpdrive.Warpdrive"`, app name, scheme, CLI path). TAKE upstream elsewhere. |
 | `README.md`, other top-level `*.md` docs | KEEP OURS (de-clouded framing). |
-| `.github/workflows/**` | KEEP OURS. We manage CI/release ourselves and do not want upstream's private-infra workflows. |
+| `.github/workflows/**` | Run `./script/sync-upstream --sanitize-workflows` before committing. Only `ci.yml`, `release.yml`, and `update-homebrew-cask.yml` are allowed. |
 | `script/build-release`, `script/update-homebrew-cask` | KEEP OURS (warpdrive-specific). |
 | `crates/**`, `app/src/**` (terminal, editor, UI, input, etc.) | TAKE UPSTREAM. These are Warp's core; the fork does not modify them. After taking upstream, the build must still pass. |
 
@@ -67,6 +67,7 @@ git add <file>
 Then complete the merge:
 
 ```bash
+./script/sync-upstream --sanitize-workflows
 git commit --no-edit
 ```
 

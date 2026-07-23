@@ -10,6 +10,8 @@
 # Usage:
 #   ./script/sync-upstream            # fetch + create sync branch + attempt merge
 #   ./script/sync-upstream --status   # just report how far behind upstream we are
+#   ./script/sync-upstream --sanitize-workflows # restore fork workflows during a conflicted merge
+#   ./script/sync-upstream --check-workflows    # verify only fork workflows are present
 #
 set -euo pipefail
 
@@ -18,10 +20,60 @@ cd "$REPO_ROOT"
 
 UPSTREAM_URL="https://github.com/warpdotdev/warp.git"
 UPSTREAM_BRANCH="master"
+FORK_WORKFLOWS=(
+  ".github/workflows/ci.yml"
+  ".github/workflows/release.yml"
+  ".github/workflows/update-homebrew-cask.yml"
+)
 
 info()  { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn()  { printf '\033[1;33mwarning:\033[0m %s\n' "$*"; }
 err()   { printf '\033[1;31merror:\033[0m %s\n' "$*" >&2; }
+
+is_fork_workflow() {
+  local workflow="$1"
+  local allowed
+  for allowed in "${FORK_WORKFLOWS[@]}"; do
+    [[ "$workflow" == "$allowed" ]] && return 0
+  done
+  return 1
+}
+
+check_workflows() {
+  local workflow allowed failed=0
+  shopt -s nullglob
+  for allowed in "${FORK_WORKFLOWS[@]}"; do
+    if [[ ! -f "$allowed" ]]; then
+      err "Fork workflow is missing: $allowed"
+      failed=1
+    fi
+  done
+  for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
+    if ! is_fork_workflow "$workflow"; then
+      err "Upstream workflow is not allowed: $workflow"
+      failed=1
+    fi
+  done
+  return "$failed"
+}
+
+sanitize_workflows() {
+  local workflow
+  if ! git rev-parse --verify --quiet MERGE_HEAD >/dev/null; then
+    err "No merge is in progress."
+    exit 1
+  fi
+
+  shopt -s nullglob
+  for workflow in .github/workflows/*.yml .github/workflows/*.yaml; do
+    if ! is_fork_workflow "$workflow"; then
+      rm -f "$workflow"
+    fi
+  done
+  git restore --source=HEAD --staged --worktree -- "${FORK_WORKFLOWS[@]}"
+  git add -A -- .github/workflows
+  check_workflows
+}
 
 ensure_upstream_remote() {
   if ! git remote get-url upstream >/dev/null 2>&1; then
@@ -51,6 +103,16 @@ if [[ "${1:-}" == "--status" ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "--check-workflows" ]]; then
+  check_workflows
+  exit
+fi
+
+if [[ "${1:-}" == "--sanitize-workflows" ]]; then
+  sanitize_workflows
+  exit
+fi
+
 # Refuse to run on a dirty tree; a merge needs a clean starting point.
 if ! git diff --quiet || ! git diff --cached --quiet; then
   err "Working tree is dirty. Commit or stash your changes first."
@@ -76,7 +138,9 @@ info "Creating sync branch '$SYNC_BRANCH' from '$BASE_BRANCH'"
 git checkout -b "$SYNC_BRANCH"
 
 info "Merging upstream/$UPSTREAM_BRANCH ..."
-if git merge --no-edit upstream/"$UPSTREAM_BRANCH"; then
+if git merge --no-commit --no-ff upstream/"$UPSTREAM_BRANCH"; then
+  sanitize_workflows
+  git commit --no-edit
   echo
   info "CLEAN MERGE. No conflicts."
   info "Next steps:"
@@ -103,6 +167,7 @@ echo "  - terminal / editor / UI : TAKE upstream's version, then verify it compi
 echo
 info "The merge is in progress. After resolving each file:"
 echo "  git add <file>      # for each resolved file"
+echo "  ./script/sync-upstream --sanitize-workflows"
 echo "  git commit --no-edit"
 echo "  cargo check -p warp --bin warpdrive"
 echo
