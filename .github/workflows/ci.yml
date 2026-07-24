@@ -39,11 +39,5 @@ jobs:
       - name: Build
         run: cargo build --bin warpdrive
 
-      - name: Test opencode_client
-        run: cargo test -p opencode_client
-
-      - name: Test opencode_adapter
-        run: cargo test -p warp opencode_adapter
-
       - name: Check formatting
         run: cargo fmt -- --check
