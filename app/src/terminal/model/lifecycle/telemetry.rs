@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use instant::Instant;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use strum_macros::{EnumDiscriminants, EnumIter};
 use warp_core::telemetry::{EnablementState, TelemetryEvent, TelemetryEventDesc};
 
@@ -41,6 +41,7 @@ pub struct LifecycleRecoveryRecord {
     pub(in crate::terminal) is_bootstrapped: bool,
     pub(in crate::terminal) is_bootstrap_done: bool,
     pub(in crate::terminal) is_alt_screen_active: bool,
+    pub(in crate::terminal) completion_mismatch: bool,
     pub(in crate::terminal) suppressed_repeats: u64,
 }
 
@@ -70,6 +71,7 @@ impl LifecycleRecoveryRecord {
             is_bootstrapped: snapshot.is_bootstrapped,
             is_bootstrap_done: snapshot.is_bootstrap_done,
             is_alt_screen_active: snapshot.is_alt_screen_active,
+            completion_mismatch: snapshot.completion_mismatch,
             suppressed_repeats: 0,
         }
     }
@@ -170,6 +172,7 @@ impl TelemetryEvent for LifecycleTelemetryEvent {
                 "is_bootstrapped": record.is_bootstrapped,
                 "is_bootstrap_done": record.is_bootstrap_done,
                 "is_alt_screen_active": record.is_alt_screen_active,
+                "completion_mismatch": record.completion_mismatch,
                 "suppressed_repeats": record.suppressed_repeats,
             })),
         }
